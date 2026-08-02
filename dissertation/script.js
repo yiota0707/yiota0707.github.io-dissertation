@@ -2,30 +2,62 @@
 
 
 /*
-    Interactive MARL demonstration
-    --------------------------------
-    This is a browser-based educational representation of the
-    mechanisms used in the dissertation.
+    ============================================================
+    INTERACTIVE DISSERTATION DEMONSTRATION
+    ============================================================
 
-    Cooperation colour: #7b6fd6
-    Defection colour: #c06082
+    This file implements an educational browser visualisation of
+    the mechanisms described in the dissertation.
+
+    It is intentionally labelled as a demonstration because it is
+    not the full Numba-optimised experimental implementation used
+    to produce the dissertation's numerical results.
+
+    Model colours:
+        Baseline: #c06082
+        Hybrid:   #7b6fd6
+
+    Action colours:
+        Cooperation: #7b6fd6
+        Defection:   #c06082
 */
 
 
 const COOPERATE = 0;
 const DEFECT = 1;
 
+const STAY = 0;
+const SWITCH = 1;
+
 const COOPERATE_COLOUR = "#7b6fd6";
 const DEFECT_COLOUR = "#c06082";
+
+const BASELINE_COLOUR = "#c06082";
+const HYBRID_COLOUR = "#7b6fd6";
+
 const CONNECTION_COLOUR = "#bbb5c0";
 const TEXT_COLOUR = "#211d28";
 
 
-const canvas = document.getElementById("agentCanvas");
-const context = canvas.getContext("2d");
+/*
+    ============================================================
+    DOCUMENT ELEMENTS
+    ============================================================
+*/
 
-const chartCanvas = document.getElementById("cooperationChart");
-const chartContext = chartCanvas.getContext("2d");
+
+const canvas =
+    document.getElementById("agentCanvas");
+
+const context =
+    canvas.getContext("2d");
+
+
+const chartCanvas =
+    document.getElementById("cooperationChart");
+
+const chartContext =
+    chartCanvas.getContext("2d");
 
 
 const modelSelect =
@@ -39,6 +71,9 @@ const assortativityInput =
 
 const learningRateInput =
     document.getElementById("learningRateInput");
+
+const discountInput =
+    document.getElementById("discountInput");
 
 const temperatureInput =
     document.getElementById("temperatureInput");
@@ -59,6 +94,9 @@ const assortativityOutput =
 const learningRateOutput =
     document.getElementById("learningRateOutput");
 
+const discountOutput =
+    document.getElementById("discountOutput");
+
 const temperatureOutput =
     document.getElementById("temperatureOutput");
 
@@ -77,6 +115,9 @@ const stepButton =
 
 const resetButton =
     document.getElementById("resetButton");
+
+const defaultPresetButton =
+    document.getElementById("defaultPresetButton");
 
 
 const generationValue =
@@ -106,6 +147,12 @@ const modelExplanation =
 
 const chartModelLabel =
     document.getElementById("chartModelLabel");
+
+const canvasModelName =
+    document.getElementById("canvasModelName");
+
+const canvasAssortativity =
+    document.getElementById("canvasAssortativity");
 
 
 const ccValue =
@@ -141,20 +188,41 @@ const navigation =
     document.getElementById("navigation");
 
 
+/*
+    ============================================================
+    SIMULATION STATE
+    ============================================================
+*/
+
+
 let agents = [];
 let pairs = [];
 
 let generation = 0;
+let interactionRound = 0;
+
 let isRunning = false;
 let simulationTimer = null;
 
 let cooperationHistory = [];
+
 let currentOutcomes = {
     cc: 0,
     cd: 0,
     dc: 0,
     dd: 0
 };
+
+
+let lastRematchChangedAgents = 0;
+let lastRematchStablePairs = 0;
+
+
+/*
+    ============================================================
+    AGENT
+    ============================================================
+*/
 
 
 class Agent {
@@ -166,10 +234,7 @@ class Agent {
         this.x = x;
         this.y = y;
 
-        this.targetX = x;
-        this.targetY = y;
-
-        this.radius = 17;
+        this.radius = 16;
 
         this.action =
             Math.random() < 0.5
@@ -180,33 +245,31 @@ class Agent {
             this.action;
 
         this.reward = 0;
-
         this.totalReward = 0;
 
         this.partnerId = null;
-
         this.previousPartnerId = null;
 
-        this.switched = false;
+        this.selectedSwitchAction = STAY;
 
 
         /*
-            State values:
+            Browser state representation:
 
-            0 = previous self C, previous partner C
-            1 = previous self C, previous partner D
-            2 = previous self D, previous partner C
-            3 = previous self D, previous partner D
+            0 = own previous C, partner previous C
+            1 = own previous C, partner previous D
+            2 = own previous D, partner previous C
+            3 = own previous D, partner previous D
         */
 
         this.state = 0;
 
 
         /*
-            Two Q-values per state:
+            Prisoner's Dilemma action values:
 
-            action 0 = cooperate
-            action 1 = defect
+            qValues[state][0] = cooperate
+            qValues[state][1] = defect
         */
 
         this.qValues = [
@@ -218,10 +281,10 @@ class Agent {
 
 
         /*
-            Hybrid switching values:
+            Hybrid stay-or-switch values:
 
-            0 = stay
-            1 = switch
+            switchQ[state][0] = stay
+            switchQ[state][1] = switch
         */
 
         this.switchQ = [
@@ -236,63 +299,74 @@ class Agent {
 }
 
 
+/*
+    ============================================================
+    CANVAS SIZE
+    ============================================================
+*/
+
+
 function resizeCanvases() {
 
-    const agentRectangle =
-        canvas.getBoundingClientRect();
-
-    const agentPixelRatio =
-        window.devicePixelRatio || 1;
-
-    canvas.width =
-        agentRectangle.width
-        *
-        agentPixelRatio;
-
-    canvas.height =
-        agentRectangle.height
-        *
-        agentPixelRatio;
-
-    context.setTransform(
-        agentPixelRatio,
-        0,
-        0,
-        agentPixelRatio,
-        0,
-        0
+    resizeCanvasForDisplay(
+        canvas,
+        context
     );
 
-
-    const chartRectangle =
-        chartCanvas.getBoundingClientRect();
-
-    const chartPixelRatio =
-        window.devicePixelRatio || 1;
-
-    chartCanvas.width =
-        chartRectangle.width
-        *
-        chartPixelRatio;
-
-    chartCanvas.height =
-        chartRectangle.height
-        *
-        chartPixelRatio;
-
-    chartContext.setTransform(
-        chartPixelRatio,
-        0,
-        0,
-        chartPixelRatio,
-        0,
-        0
+    resizeCanvasForDisplay(
+        chartCanvas,
+        chartContext
     );
 
 
     positionAgentsInCircle();
     drawSimulation();
     drawChart();
+
+}
+
+
+function resizeCanvasForDisplay(
+    targetCanvas,
+    targetContext
+) {
+
+    const rectangle =
+        targetCanvas.getBoundingClientRect();
+
+    const pixelRatio =
+        window.devicePixelRatio || 1;
+
+
+    targetCanvas.width =
+        Math.max(
+            1,
+            Math.round(
+                rectangle.width
+                *
+                pixelRatio
+            )
+        );
+
+    targetCanvas.height =
+        Math.max(
+            1,
+            Math.round(
+                rectangle.height
+                *
+                pixelRatio
+            )
+        );
+
+
+    targetContext.setTransform(
+        pixelRatio,
+        0,
+        0,
+        pixelRatio,
+        0,
+        0
+    );
 
 }
 
@@ -310,11 +384,19 @@ function getCanvasSize() {
 }
 
 
+/*
+    ============================================================
+    INITIALISATION
+    ============================================================
+*/
+
+
 function initialiseSimulation() {
 
     stopSimulation();
 
     generation = 0;
+    interactionRound = 0;
 
     cooperationHistory = [];
 
@@ -325,9 +407,24 @@ function initialiseSimulation() {
         dd: 0
     };
 
+    lastRematchChangedAgents = 0;
+    lastRematchStablePairs = 0;
+
 
     const population =
-        Number(populationInput.value);
+        makePopulationEven(
+            Number(
+                populationInput.value
+            )
+        );
+
+
+    populationInput.value =
+        String(population);
+
+    populationOutput.textContent =
+        String(population);
+
 
     agents = [];
 
@@ -342,12 +439,10 @@ function initialiseSimulation() {
         size.height / 2;
 
     const circleRadius =
-        Math.min(
+        calculateAgentCircleRadius(
             size.width,
             size.height
-        )
-        *
-        0.36;
+        );
 
 
     for (
@@ -394,16 +489,55 @@ function initialiseSimulation() {
     }
 
 
-    pairAgentsRandomly();
+    pairAllAgentsRandomly();
+
 
     cooperationHistory.push(
         calculateCooperationRate()
     );
 
 
+    updateControlDisplays();
+    updateModelDescription();
     updateInterface();
+
     drawSimulation();
     drawChart();
+
+}
+
+
+function makePopulationEven(value) {
+
+    const rounded =
+        Math.round(value);
+
+    return rounded % 2 === 0
+        ? rounded
+        : rounded + 1;
+
+}
+
+
+function calculateAgentCircleRadius(
+    width,
+    height
+) {
+
+    const populationAdjustment =
+        agents.length > 50
+            ? 0.43
+            : 0.39;
+
+
+    return (
+        Math.min(
+            width,
+            height
+        )
+        *
+        populationAdjustment
+    );
 
 }
 
@@ -425,12 +559,10 @@ function positionAgentsInCircle() {
         size.height / 2;
 
     const circleRadius =
-        Math.min(
+        calculateAgentCircleRadius(
             size.width,
             size.height
-        )
-        *
-        0.36;
+        );
 
 
     agents.forEach(
@@ -462,16 +594,25 @@ function positionAgentsInCircle() {
                 *
                 circleRadius;
 
-            agent.targetX =
-                agent.x;
 
-            agent.targetY =
-                agent.y;
+            agent.radius =
+                agents.length > 70
+                    ? 9
+                    : agents.length > 40
+                        ? 12
+                        : 16;
 
         }
     );
 
 }
+
+
+/*
+    ============================================================
+    ARRAY UTILITIES
+    ============================================================
+*/
 
 
 function shuffleArray(array) {
@@ -516,50 +657,28 @@ function shuffleArray(array) {
 }
 
 
-function pairAgentsRandomly() {
-
-    const shuffledAgents =
-        shuffleArray(agents);
-
-
-    pairs = [];
+/*
+    ============================================================
+    PAIR CREATION
+    ============================================================
+*/
 
 
-    for (
-        let index = 0;
-        index < shuffledAgents.length;
-        index += 2
+function createPair(
+    firstAgent,
+    secondAgent,
+    pairCollection = pairs
+) {
+
+    if (
+        !firstAgent
+        ||
+        !secondAgent
+        ||
+        firstAgent.id === secondAgent.id
     ) {
-
-        if (!shuffledAgents[index + 1]) {
-            continue;
-        }
-
-
-        const firstAgent =
-            shuffledAgents[index];
-
-        const secondAgent =
-            shuffledAgents[index + 1];
-
-
-        createPair(
-            firstAgent,
-            secondAgent
-        );
-
+        return;
     }
-
-}
-
-
-function createPair(firstAgent, secondAgent) {
-
-    firstAgent.previousPartnerId =
-        firstAgent.partnerId;
-
-    secondAgent.previousPartnerId =
-        secondAgent.partnerId;
 
 
     firstAgent.partnerId =
@@ -569,18 +688,7 @@ function createPair(firstAgent, secondAgent) {
         firstAgent.id;
 
 
-    firstAgent.switched =
-        firstAgent.previousPartnerId !== null
-        &&
-        firstAgent.previousPartnerId !== secondAgent.id;
-
-    secondAgent.switched =
-        secondAgent.previousPartnerId !== null
-        &&
-        secondAgent.previousPartnerId !== firstAgent.id;
-
-
-    pairs.push([
+    pairCollection.push([
         firstAgent.id,
         secondAgent.id
     ]);
@@ -588,62 +696,42 @@ function createPair(firstAgent, secondAgent) {
 }
 
 
-function pairAgentsAssortatively() {
-
-    const cooperators =
-        shuffleArray(
-            agents.filter(
-                function filterCooperators(agent) {
-                    return agent.action === COOPERATE;
-                }
-            )
-        );
-
-
-    const defectors =
-        shuffleArray(
-            agents.filter(
-                function filterDefectors(agent) {
-                    return agent.action === DEFECT;
-                }
-            )
-        );
-
-
-    const unmatched = [];
+function pairAllAgentsRandomly() {
 
     pairs = [];
 
-
-    pairWithinGroup(
-        cooperators,
-        unmatched
+    pairSubsetRandomly(
+        agents,
+        pairs
     );
 
-    pairWithinGroup(
-        defectors,
-        unmatched
-    );
+}
 
 
-    const shuffledUnmatched =
-        shuffleArray(unmatched);
+function pairSubsetRandomly(
+    subset,
+    targetPairs
+) {
+
+    const shuffled =
+        shuffleArray(subset);
 
 
     for (
         let index = 0;
-        index < shuffledUnmatched.length;
+        index < shuffled.length;
         index += 2
     ) {
 
-        if (!shuffledUnmatched[index + 1]) {
-            continue;
+        if (!shuffled[index + 1]) {
+            break;
         }
 
 
         createPair(
-            shuffledUnmatched[index],
-            shuffledUnmatched[index + 1]
+            shuffled[index],
+            shuffled[index + 1],
+            targetPairs
         );
 
     }
@@ -651,7 +739,72 @@ function pairAgentsAssortatively() {
 }
 
 
-function pairWithinGroup(group, unmatched) {
+function pairSubsetAssortatively(
+    subset,
+    targetPairs
+) {
+
+    const cooperators =
+        shuffleArray(
+            subset.filter(
+                function selectCooperators(agent) {
+                    return (
+                        agent.previousAction
+                        ===
+                        COOPERATE
+                    );
+                }
+            )
+        );
+
+
+    const defectors =
+        shuffleArray(
+            subset.filter(
+                function selectDefectors(agent) {
+                    return (
+                        agent.previousAction
+                        ===
+                        DEFECT
+                    );
+                }
+            )
+        );
+
+
+    const unmatched = [];
+
+
+    pairWithinBehaviourGroup(
+        cooperators,
+        unmatched,
+        targetPairs
+    );
+
+    pairWithinBehaviourGroup(
+        defectors,
+        unmatched,
+        targetPairs
+    );
+
+
+    if (unmatched.length > 1) {
+
+        pairSubsetRandomly(
+            unmatched,
+            targetPairs
+        );
+
+    }
+
+}
+
+
+function pairWithinBehaviourGroup(
+    group,
+    unmatched,
+    targetPairs
+) {
 
     for (
         let index = 0;
@@ -672,7 +825,8 @@ function pairWithinGroup(group, unmatched) {
 
         createPair(
             group[index],
-            group[index + 1]
+            group[index + 1],
+            targetPairs
         );
 
     }
@@ -680,7 +834,14 @@ function pairWithinGroup(group, unmatched) {
 }
 
 
-function rematchAgents() {
+/*
+    ============================================================
+    ASSORTATIVE REMATCHING
+    ============================================================
+*/
+
+
+function createRematchedPairs(subset) {
 
     const assortativity =
         Number(
@@ -688,53 +849,80 @@ function rematchAgents() {
         );
 
 
-    const model =
-        modelSelect.value;
+    const generatedPairs = [];
 
 
-    if (model === "baseline") {
+    if (
+        Math.random()
+        <
+        assortativity
+    ) {
 
-        /*
-            Baseline representation:
+        pairSubsetAssortatively(
+            subset,
+            generatedPairs
+        );
 
-            Rematching is controlled directly by the assortativity
-            probability.
-        */
+    } else {
 
-        if (
-            Math.random()
-            <
-            assortativity
-        ) {
-
-            pairAgentsAssortatively();
-
-        } else {
-
-            pairAgentsRandomly();
-
-        }
-
-        return;
+        pairSubsetRandomly(
+            subset,
+            generatedPairs
+        );
 
     }
 
 
-    /*
-        Hybrid representation:
+    return generatedPairs;
 
-        Agents first express learned switching decisions.
+}
 
-        Agents that remain together keep their pair where possible.
-        Switching agents are then rematched.
-    */
 
-    const stayingPairs = [];
-    const switchingAgents = [];
+/*
+    ============================================================
+    BASELINE REMATCHING
+    ============================================================
+*/
+
+
+function rematchBaseline() {
+
+    preservePreviousPartners();
+
+
+    const newPairs =
+        createRematchedPairs(
+            agents
+        );
+
+
+    pairs =
+        newPairs;
+
+
+    calculateRematchingStatistics();
+
+}
+
+
+/*
+    ============================================================
+    HYBRID PARTNER PROCESS
+    ============================================================
+*/
+
+
+function rematchHybrid() {
+
+    preservePreviousPartners();
+
+
+    const retainedPairs = [];
+    const rematchingPool = [];
 
 
     pairs.forEach(
-        function evaluatePair(pair) {
+        function evaluateCurrentPair(pair) {
 
             const firstAgent =
                 agents[pair[0]];
@@ -743,31 +931,39 @@ function rematchAgents() {
                 agents[pair[1]];
 
 
-            const firstSwitch =
+            const firstDecision =
                 chooseSwitchAction(
                     firstAgent
                 );
 
-            const secondSwitch =
+            const secondDecision =
                 chooseSwitchAction(
                     secondAgent
                 );
 
 
+            firstAgent.selectedSwitchAction =
+                firstDecision;
+
+            secondAgent.selectedSwitchAction =
+                secondDecision;
+
+
             if (
-                !firstSwitch
+                firstDecision === STAY
                 &&
-                !secondSwitch
+                secondDecision === STAY
             ) {
 
-                stayingPairs.push([
+                createPair(
                     firstAgent,
-                    secondAgent
-                ]);
+                    secondAgent,
+                    retainedPairs
+                );
 
             } else {
 
-                switchingAgents.push(
+                rematchingPool.push(
                     firstAgent,
                     secondAgent
                 );
@@ -778,145 +974,130 @@ function rematchAgents() {
     );
 
 
-    pairs = [];
+    const rematchedPairs =
+        createRematchedPairs(
+            rematchingPool
+        );
 
 
-    stayingPairs.forEach(
-        function keepPair(pair) {
+    pairs = [
+        ...retainedPairs,
+        ...rematchedPairs
+    ];
 
-            createPair(
-                pair[0],
-                pair[1]
-            );
+
+    calculateRematchingStatistics();
+
+}
+
+
+function preservePreviousPartners() {
+
+    agents.forEach(
+        function preservePartner(agent) {
+
+            agent.previousPartnerId =
+                agent.partnerId;
 
         }
     );
+
+}
+
+
+function calculateRematchingStatistics() {
+
+    lastRematchChangedAgents =
+        agents.filter(
+            function didAgentChangePartner(agent) {
+
+                return (
+                    agent.previousPartnerId !== null
+                    &&
+                    agent.previousPartnerId
+                    !==
+                    agent.partnerId
+                );
+
+            }
+        ).length;
+
+
+    lastRematchStablePairs =
+        pairs.filter(
+            function isRetainedPair(pair) {
+
+                const firstAgent =
+                    agents[pair[0]];
+
+                const secondAgent =
+                    agents[pair[1]];
+
+
+                return (
+                    firstAgent.previousPartnerId
+                    ===
+                    secondAgent.id
+                    &&
+                    secondAgent.previousPartnerId
+                    ===
+                    firstAgent.id
+                );
+
+            }
+        ).length;
+
+}
+
+
+/*
+    ============================================================
+    STATE AND ACTION SELECTION
+    ============================================================
+*/
+
+
+function determineState(
+    ownPreviousAction,
+    partnerPreviousAction
+) {
+
+    if (
+        ownPreviousAction === COOPERATE
+        &&
+        partnerPreviousAction === COOPERATE
+    ) {
+        return 0;
+    }
 
 
     if (
-        switchingAgents.length
-        >
-        1
+        ownPreviousAction === COOPERATE
+        &&
+        partnerPreviousAction === DEFECT
     ) {
-
-        if (
-            Math.random()
-            <
-            assortativity
-        ) {
-
-            pairSubsetAssortatively(
-                switchingAgents
-            );
-
-        } else {
-
-            pairSubsetRandomly(
-                switchingAgents
-            );
-
-        }
-
+        return 1;
     }
 
-}
 
-
-function pairSubsetRandomly(subset) {
-
-    const shuffled =
-        shuffleArray(subset);
-
-
-    for (
-        let index = 0;
-        index < shuffled.length;
-        index += 2
+    if (
+        ownPreviousAction === DEFECT
+        &&
+        partnerPreviousAction === COOPERATE
     ) {
-
-        if (!shuffled[index + 1]) {
-            continue;
-        }
-
-
-        createPair(
-            shuffled[index],
-            shuffled[index + 1]
-        );
-
+        return 2;
     }
 
-}
 
-
-function pairSubsetAssortatively(subset) {
-
-    const cooperators =
-        shuffleArray(
-            subset.filter(
-                function filterCooperators(agent) {
-                    return agent.action === COOPERATE;
-                }
-            )
-        );
-
-
-    const defectors =
-        shuffleArray(
-            subset.filter(
-                function filterDefectors(agent) {
-                    return agent.action === DEFECT;
-                }
-            )
-        );
-
-
-    const unmatched = [];
-
-
-    pairWithinGroup(
-        cooperators,
-        unmatched
-    );
-
-    pairWithinGroup(
-        defectors,
-        unmatched
-    );
-
-
-    pairSubsetRandomly(
-        unmatched
-    );
+    return 3;
 
 }
 
 
-function chooseSwitchAction(agent) {
-
-    const temperature =
-        Number(
-            temperatureInput.value
-        );
-
-
-    const values =
-        agent.switchQ[agent.state];
-
-
-    return (
-        boltzmannAction(
-            values,
-            temperature
-        )
-        ===
-        1
-    );
-
-}
-
-
-function boltzmannAction(values, temperature) {
+function boltzmannAction(
+    values,
+    temperature
+) {
 
     const safeTemperature =
         Math.max(
@@ -962,6 +1143,21 @@ function boltzmannAction(values, temperature) {
         secondExponent;
 
 
+    if (
+        !Number.isFinite(total)
+        ||
+        total <= 0
+    ) {
+
+        return (
+            Math.random() < 0.5
+                ? 0
+                : 1
+        );
+
+    }
+
+
     const probabilityFirst =
         firstExponent
         /
@@ -979,41 +1175,39 @@ function boltzmannAction(values, temperature) {
 }
 
 
-function determineState(
-    ownPreviousAction,
-    partnerPreviousAction
-) {
+function choosePrisonersDilemmaAction(agent) {
 
-    if (
-        ownPreviousAction === COOPERATE
-        &&
-        partnerPreviousAction === COOPERATE
-    ) {
-        return 0;
-    }
-
-
-    if (
-        ownPreviousAction === COOPERATE
-        &&
-        partnerPreviousAction === DEFECT
-    ) {
-        return 1;
-    }
-
-
-    if (
-        ownPreviousAction === DEFECT
-        &&
-        partnerPreviousAction === COOPERATE
-    ) {
-        return 2;
-    }
-
-
-    return 3;
+    return boltzmannAction(
+        agent.qValues[
+            agent.state
+        ],
+        Number(
+            temperatureInput.value
+        )
+    );
 
 }
+
+
+function chooseSwitchAction(agent) {
+
+    return boltzmannAction(
+        agent.switchQ[
+            agent.state
+        ],
+        Number(
+            temperatureInput.value
+        )
+    );
+
+}
+
+
+/*
+    ============================================================
+    PAYOFFS
+    ============================================================
+*/
 
 
 function getRewards(
@@ -1059,9 +1253,174 @@ function getRewards(
 }
 
 
+/*
+    ============================================================
+    Q-LEARNING UPDATES
+    ============================================================
+*/
+
+
+function updateActionQValue(
+    agent,
+    previousState,
+    action,
+    reward,
+    nextState
+) {
+
+    const learningRate =
+        Number(
+            learningRateInput.value
+        );
+
+    const discountFactor =
+        Number(
+            discountInput.value
+        );
+
+
+    const currentValue =
+        agent.qValues[
+            previousState
+        ][action];
+
+
+    const nextMaximum =
+        Math.max(
+            agent.qValues[
+                nextState
+            ][COOPERATE],
+            agent.qValues[
+                nextState
+            ][DEFECT]
+        );
+
+
+    const target =
+        reward
+        +
+        discountFactor
+        *
+        nextMaximum;
+
+
+    agent.qValues[
+        previousState
+    ][action]
+    =
+    currentValue
+    +
+    learningRate
+    *
+    (
+        target
+        -
+        currentValue
+    );
+
+}
+
+
+function updateSwitchQValue(
+    agent,
+    previousState,
+    switchAction
+) {
+
+    const learningRate =
+        Number(
+            learningRateInput.value
+        );
+
+    const discountFactor =
+        Number(
+            discountInput.value
+        );
+
+
+    /*
+        Browser demonstration reward for the partner decision.
+
+        Retaining a productive interaction receives the observed
+        reward. Leaving a low-reward interaction is represented as
+        comparatively useful.
+
+        This educational approximation is not presented as the
+        complete dissertation switching update.
+    */
+
+    let switchReward;
+
+
+    if (switchAction === STAY) {
+
+        switchReward =
+            agent.reward;
+
+    } else {
+
+        switchReward =
+            Math.max(
+                0,
+                3 - agent.reward
+            );
+
+    }
+
+
+    const currentValue =
+        agent.switchQ[
+            previousState
+        ][switchAction];
+
+
+    const nextMaximum =
+        Math.max(
+            agent.switchQ[
+                agent.state
+            ][STAY],
+            agent.switchQ[
+                agent.state
+            ][SWITCH]
+        );
+
+
+    const target =
+        switchReward
+        +
+        discountFactor
+        *
+        nextMaximum;
+
+
+    agent.switchQ[
+        previousState
+    ][switchAction]
+    =
+    currentValue
+    +
+    learningRate
+    *
+    (
+        target
+        -
+        currentValue
+    );
+
+}
+
+
+/*
+    ============================================================
+    ONE DEMONSTRATION STEP
+    ============================================================
+*/
+
+
 function runGeneration() {
 
     generation += 1;
+    interactionRound += 1;
 
 
     currentOutcomes = {
@@ -1092,46 +1451,50 @@ function runGeneration() {
                 agents[pair[1]];
 
 
-            firstAgent.state =
+            const firstPreviousState =
                 determineState(
                     firstAgent.previousAction,
                     secondAgent.previousAction
                 );
 
 
-            secondAgent.state =
+            const secondPreviousState =
                 determineState(
                     secondAgent.previousAction,
                     firstAgent.previousAction
                 );
 
 
-            firstAgent.action =
-                boltzmannAction(
-                    firstAgent.qValues[
-                        firstAgent.state
-                    ],
-                    Number(
-                        temperatureInput.value
-                    )
+            firstAgent.state =
+                firstPreviousState;
+
+            secondAgent.state =
+                secondPreviousState;
+
+
+            const firstAction =
+                choosePrisonersDilemmaAction(
+                    firstAgent
                 );
 
+
+            const secondAction =
+                choosePrisonersDilemmaAction(
+                    secondAgent
+                );
+
+
+            firstAgent.action =
+                firstAction;
 
             secondAgent.action =
-                boltzmannAction(
-                    secondAgent.qValues[
-                        secondAgent.state
-                    ],
-                    Number(
-                        temperatureInput.value
-                    )
-                );
+                secondAction;
 
 
             const rewards =
                 getRewards(
-                    firstAgent.action,
-                    secondAgent.action
+                    firstAction,
+                    secondAction
                 );
 
 
@@ -1143,67 +1506,117 @@ function runGeneration() {
 
 
             firstAgent.totalReward +=
-                rewards[0];
+                firstAgent.reward;
 
             secondAgent.totalReward +=
-                rewards[1];
+                secondAgent.reward;
 
 
             updateOutcomeCounts(
-                firstAgent.action,
-                secondAgent.action
+                firstAction,
+                secondAction
             );
 
 
-            updateQValue(
+            const firstNextState =
+                determineState(
+                    firstAction,
+                    secondAction
+                );
+
+
+            const secondNextState =
+                determineState(
+                    secondAction,
+                    firstAction
+                );
+
+
+            updateActionQValue(
                 firstAgent,
-                firstAgent.action,
-                firstAgent.reward
+                firstPreviousState,
+                firstAction,
+                firstAgent.reward,
+                firstNextState
             );
 
 
-            updateQValue(
+            updateActionQValue(
                 secondAgent,
-                secondAgent.action,
-                secondAgent.reward
+                secondPreviousState,
+                secondAction,
+                secondAgent.reward,
+                secondNextState
             );
 
 
-            if (
-                modelSelect.value
-                ===
-                "hybrid"
-            ) {
+            firstAgent.state =
+                firstNextState;
 
-                updateSwitchQValue(
-                    firstAgent
-                );
-
-                updateSwitchQValue(
-                    secondAgent
-                );
-
-            }
+            secondAgent.state =
+                secondNextState;
 
         }
     );
 
 
-    const roundsPerPartner =
+    const roundsPerInteraction =
         Number(
             roundsInput.value
         );
 
 
     if (
-        generation
-        %
-        roundsPerPartner
-        ===
-        0
+        interactionRound
+        >=
+        roundsPerInteraction
     ) {
 
-        rematchAgents();
+        interactionRound = 0;
+
+
+        if (
+            modelSelect.value
+            ===
+            "hybrid"
+        ) {
+
+            /*
+                Select and update partner actions before rematching.
+            */
+
+            agents.forEach(
+                function prepareSwitchDecision(agent) {
+
+                    agent.selectedSwitchAction =
+                        chooseSwitchAction(
+                            agent
+                        );
+
+                }
+            );
+
+
+            agents.forEach(
+                function learnSwitchDecision(agent) {
+
+                    updateSwitchQValue(
+                        agent,
+                        agent.state,
+                        agent.selectedSwitchAction
+                    );
+
+                }
+            );
+
+
+            rematchHybrid();
+
+        } else {
+
+            rematchBaseline();
+
+        }
 
     }
 
@@ -1216,7 +1629,7 @@ function runGeneration() {
     if (
         cooperationHistory.length
         >
-        100
+        120
     ) {
 
         cooperationHistory.shift();
@@ -1231,6 +1644,13 @@ function runGeneration() {
 }
 
 
+/*
+    ============================================================
+    OUTCOME COUNTS
+    ============================================================
+*/
+
+
 function updateOutcomeCounts(
     firstAction,
     secondAction
@@ -1243,7 +1663,6 @@ function updateOutcomeCounts(
     ) {
 
         currentOutcomes.cc += 1;
-
         return;
 
     }
@@ -1256,7 +1675,6 @@ function updateOutcomeCounts(
     ) {
 
         currentOutcomes.cd += 1;
-
         return;
 
     }
@@ -1269,7 +1687,6 @@ function updateOutcomeCounts(
     ) {
 
         currentOutcomes.dc += 1;
-
         return;
 
     }
@@ -1280,102 +1697,16 @@ function updateOutcomeCounts(
 }
 
 
-function updateQValue(
-    agent,
-    action,
-    reward
-) {
-
-    const learningRate =
-        Number(
-            learningRateInput.value
-        );
-
-
-    const currentValue =
-        agent.qValues[
-            agent.state
-        ][action];
-
-
-    /*
-        Immediate-reward Q update for the browser demonstration.
-    */
-
-    agent.qValues[
-        agent.state
-    ][action]
-    =
-    currentValue
-    +
-    learningRate
-    *
-    (
-        reward
-        -
-        currentValue
-    );
-
-}
-
-
-function updateSwitchQValue(agent) {
-
-    const learningRate =
-        Number(
-            learningRateInput.value
-        );
-
-
-    /*
-        Staying is given action index 0.
-        Switching is given action index 1.
-
-        Low rewards make switching comparatively more attractive.
-    */
-
-    const switchingAction =
-        agent.reward < 2
-            ? 1
-            : 0;
-
-
-    const switchingReward =
-        switchingAction === 1
-            ? 3 - agent.reward
-            : agent.reward;
-
-
-    const currentValue =
-        agent.switchQ[
-            agent.state
-        ][switchingAction];
-
-
-    agent.switchQ[
-        agent.state
-    ][switchingAction]
-    =
-    currentValue
-    +
-    learningRate
-    *
-    (
-        switchingReward
-        -
-        currentValue
-    );
-
-}
+/*
+    ============================================================
+    METRICS
+    ============================================================
+*/
 
 
 function calculateCooperationRate() {
 
-    if (
-        agents.length
-        ===
-        0
-    ) {
+    if (agents.length === 0) {
         return 0;
     }
 
@@ -1383,7 +1714,13 @@ function calculateCooperationRate() {
     const cooperativeAgents =
         agents.filter(
             function countCooperators(agent) {
-                return agent.action === COOPERATE;
+
+                return (
+                    agent.action
+                    ===
+                    COOPERATE
+                );
+
             }
         ).length;
 
@@ -1399,19 +1736,21 @@ function calculateCooperationRate() {
 
 function calculateMeanReward() {
 
-    if (
-        agents.length
-        ===
-        0
-    ) {
+    if (agents.length === 0) {
         return 0;
     }
 
 
     const total =
         agents.reduce(
-            function addReward(sum, agent) {
-                return sum + agent.reward;
+            function sumReward(sum, agent) {
+
+                return (
+                    sum
+                    +
+                    agent.reward
+                );
+
             },
             0
         );
@@ -1426,27 +1765,15 @@ function calculateMeanReward() {
 }
 
 
-function calculateSwitchingRate() {
+function calculatePartnerChangeRate() {
 
-    if (
-        agents.length
-        ===
-        0
-    ) {
+    if (agents.length === 0) {
         return 0;
     }
 
 
-    const switchedAgents =
-        agents.filter(
-            function countSwitching(agent) {
-                return agent.switched;
-            }
-        ).length;
-
-
     return (
-        switchedAgents
+        lastRematchChangedAgents
         /
         agents.length
     );
@@ -1454,46 +1781,25 @@ function calculateSwitchingRate() {
 }
 
 
-function calculateStablePairs() {
-
-    return pairs.filter(
-        function countStablePairs(pair) {
-
-            const firstAgent =
-                agents[pair[0]];
-
-            const secondAgent =
-                agents[pair[1]];
-
-
-            return (
-                firstAgent.previousPartnerId
-                ===
-                secondAgent.id
-                &&
-                secondAgent.previousPartnerId
-                ===
-                firstAgent.id
-            );
-
-        }
-    ).length;
-
-}
+/*
+    ============================================================
+    INTERFACE
+    ============================================================
+*/
 
 
 function updateInterface() {
 
     generationValue.textContent =
-        generation;
+        String(generation);
 
 
     cooperationMetric.textContent =
-        Math.round(
+        (
             calculateCooperationRate()
             *
             100
-        )
+        ).toFixed(0)
         +
         "%";
 
@@ -1504,17 +1810,19 @@ function updateInterface() {
 
 
     switchingMetric.textContent =
-        Math.round(
-            calculateSwitchingRate()
+        (
+            calculatePartnerChangeRate()
             *
             100
-        )
+        ).toFixed(0)
         +
         "%";
 
 
     stablePairsMetric.textContent =
-        calculateStablePairs();
+        String(
+            lastRematchStablePairs
+        );
 
 
     updateOutcomeInterface();
@@ -1526,65 +1834,76 @@ function updateOutcomeInterface() {
 
     const totalPairs =
         Math.max(
-            pairs.length,
+            currentOutcomes.cc
+            +
+            currentOutcomes.cd
+            +
+            currentOutcomes.dc
+            +
+            currentOutcomes.dd,
             1
         );
 
 
     ccValue.textContent =
-        currentOutcomes.cc;
+        String(
+            currentOutcomes.cc
+        );
 
     cdValue.textContent =
-        currentOutcomes.cd;
+        String(
+            currentOutcomes.cd
+        );
 
     dcValue.textContent =
-        currentOutcomes.dc;
+        String(
+            currentOutcomes.dc
+        );
 
     ddValue.textContent =
-        currentOutcomes.dd;
-
-
-    ccBar.style.width =
-        (
-            currentOutcomes.cc
-            /
-            totalPairs
-            *
-            100
-        )
-        +
-        "%";
-
-
-    cdBar.style.width =
-        (
-            currentOutcomes.cd
-            /
-            totalPairs
-            *
-            100
-        )
-        +
-        "%";
-
-
-    dcBar.style.width =
-        (
-            currentOutcomes.dc
-            /
-            totalPairs
-            *
-            100
-        )
-        +
-        "%";
-
-
-    ddBar.style.width =
-        (
+        String(
             currentOutcomes.dd
+        );
+
+
+    setOutcomeBarWidth(
+        ccBar,
+        currentOutcomes.cc,
+        totalPairs
+    );
+
+    setOutcomeBarWidth(
+        cdBar,
+        currentOutcomes.cd,
+        totalPairs
+    );
+
+    setOutcomeBarWidth(
+        dcBar,
+        currentOutcomes.dc,
+        totalPairs
+    );
+
+    setOutcomeBarWidth(
+        ddBar,
+        currentOutcomes.dd,
+        totalPairs
+    );
+
+}
+
+
+function setOutcomeBarWidth(
+    element,
+    value,
+    total
+) {
+
+    element.style.width =
+        (
+            value
             /
-            totalPairs
+            total
             *
             100
         )
@@ -1592,6 +1911,13 @@ function updateOutcomeInterface() {
         "%";
 
 }
+
+
+/*
+    ============================================================
+    SIMULATION DRAWING
+    ============================================================
+*/
 
 
 function drawSimulation() {
@@ -1614,8 +1940,14 @@ function drawSimulation() {
     );
 
 
+    drawInteractionRing(
+        size.width,
+        size.height
+    );
+
+
     pairs.forEach(
-        function drawPair(pair) {
+        function drawCurrentPair(pair) {
 
             const firstAgent =
                 agents[pair[0]];
@@ -1624,10 +1956,18 @@ function drawSimulation() {
                 agents[pair[1]];
 
 
-            drawConnection(
-                firstAgent,
+            if (
+                firstAgent
+                &&
                 secondAgent
-            );
+            ) {
+
+                drawConnection(
+                    firstAgent,
+                    secondAgent
+                );
+
+            }
 
         }
     );
@@ -1653,20 +1993,21 @@ function drawBackgroundPattern(
 
     context.save();
 
+
     context.fillStyle =
         "rgba(123, 111, 214, 0.055)";
 
 
     for (
-        let x = 30;
+        let x = 25;
         x < width;
-        x += 42
+        x += 39
     ) {
 
         for (
-            let y = 30;
+            let y = 25;
             y < height;
-            y += 42
+            y += 39
         ) {
 
             context.beginPath();
@@ -1674,7 +2015,7 @@ function drawBackgroundPattern(
             context.arc(
                 x,
                 y,
-                1.25,
+                1.15,
                 0,
                 Math.PI * 2
             );
@@ -1691,12 +2032,62 @@ function drawBackgroundPattern(
 }
 
 
+function drawInteractionRing(
+    width,
+    height
+) {
+
+    context.save();
+
+
+    const centreX =
+        width / 2;
+
+    const centreY =
+        height / 2;
+
+    const radius =
+        calculateAgentCircleRadius(
+            width,
+            height
+        );
+
+
+    context.beginPath();
+
+    context.arc(
+        centreX,
+        centreY,
+        radius,
+        0,
+        Math.PI * 2
+    );
+
+
+    context.strokeStyle =
+        "rgba(123, 111, 214, 0.10)";
+
+    context.lineWidth = 1;
+
+    context.setLineDash([
+        4,
+        7
+    ]);
+
+    context.stroke();
+
+    context.restore();
+
+}
+
+
 function drawConnection(
     firstAgent,
     secondAgent
 ) {
 
     context.save();
+
 
     context.beginPath();
 
@@ -1726,16 +2117,16 @@ function drawConnection(
     if (bothCooperate) {
 
         context.strokeStyle =
-            "rgba(123, 111, 214, 0.65)";
+            "rgba(123, 111, 214, 0.70)";
 
         context.lineWidth = 3;
 
     } else if (bothDefect) {
 
         context.strokeStyle =
-            "rgba(192, 96, 130, 0.55)";
+            "rgba(192, 96, 130, 0.60)";
 
-        context.lineWidth = 2;
+        context.lineWidth = 2.3;
 
     } else {
 
@@ -1759,12 +2150,16 @@ function drawSingleAgent(agent) {
     context.save();
 
 
+    const outerRadius =
+        agent.radius + 4;
+
+
     context.beginPath();
 
     context.arc(
         agent.x,
         agent.y,
-        agent.radius + 5,
+        outerRadius,
         0,
         Math.PI * 2
     );
@@ -1799,48 +2194,68 @@ function drawSingleAgent(agent) {
     context.shadowColor =
         "rgba(44, 35, 57, 0.18)";
 
-    context.shadowBlur = 12;
+    context.shadowBlur =
+        agents.length > 50
+            ? 5
+            : 11;
+
 
     context.fill();
-
 
     context.shadowBlur = 0;
 
 
-    context.fillStyle = "#ffffff";
+    if (
+        agent.radius
+        >=
+        12
+    ) {
 
-    context.font =
-        "800 12px Inter, sans-serif";
+        context.fillStyle =
+            "#ffffff";
 
-    context.textAlign = "center";
-    context.textBaseline = "middle";
+        context.font =
+            agent.radius >= 15
+                ? "800 11px Inter, sans-serif"
+                : "800 9px Inter, sans-serif";
+
+        context.textAlign =
+            "center";
+
+        context.textBaseline =
+            "middle";
 
 
-    context.fillText(
-        agent.action === COOPERATE
-            ? "C"
-            : "D",
-        agent.x,
-        agent.y
-    );
+        context.fillText(
+            agent.action === COOPERATE
+                ? "C"
+                : "D",
+            agent.x,
+            agent.y
+        );
+
+    }
 
 
     if (
-        generation
-        >
-        0
+        generation > 0
+        &&
+        agents.length <= 40
     ) {
 
         context.fillStyle =
             TEXT_COLOUR;
 
         context.font =
-            "650 9px Inter, sans-serif";
+            "650 8px Inter, sans-serif";
+
+        context.textAlign =
+            "center";
 
         context.fillText(
             "+" + agent.reward,
             agent.x,
-            agent.y - 29
+            agent.y - agent.radius - 10
         );
 
     }
@@ -1849,6 +2264,13 @@ function drawSingleAgent(agent) {
     context.restore();
 
 }
+
+
+/*
+    ============================================================
+    CHART
+    ============================================================
+*/
 
 
 function drawChart() {
@@ -1874,24 +2296,31 @@ function drawChart() {
     const padding = {
         top: 20,
         right: 18,
-        bottom: 32,
-        left: 42
+        bottom: 33,
+        left: 43
     };
 
 
     const chartWidth =
-        width
-        -
-        padding.left
-        -
-        padding.right;
+        Math.max(
+            1,
+            width
+            -
+            padding.left
+            -
+            padding.right
+        );
+
 
     const chartHeight =
-        height
-        -
-        padding.top
-        -
-        padding.bottom;
+        Math.max(
+            1,
+            height
+            -
+            padding.top
+            -
+            padding.bottom
+        );
 
 
     drawChartGrid(
@@ -1910,58 +2339,68 @@ function drawChart() {
     }
 
 
+    const modelColour =
+        modelSelect.value === "baseline"
+            ? BASELINE_COLOUR
+            : HYBRID_COLOUR;
+
+
+    const points =
+        cooperationHistory.map(
+            function createPoint(value, index) {
+
+                return {
+                    x:
+                        padding.left
+                        +
+                        (
+                            index
+                            /
+                            (
+                                cooperationHistory.length
+                                -
+                                1
+                            )
+                        )
+                        *
+                        chartWidth,
+
+                    y:
+                        padding.top
+                        +
+                        (
+                            1
+                            -
+                            value
+                        )
+                        *
+                        chartHeight
+                };
+
+            }
+        );
+
+
     chartContext.save();
 
     chartContext.beginPath();
 
 
-    cooperationHistory.forEach(
-        function drawPoint(value, index) {
+    points.forEach(
+        function drawPoint(point, index) {
 
-            const x =
-                padding.left
-                +
-                (
-                    index
-                    /
-                    (
-                        cooperationHistory.length
-                        -
-                        1
-                    )
-                )
-                *
-                chartWidth;
-
-
-            const y =
-                padding.top
-                +
-                (
-                    1
-                    -
-                    value
-                )
-                *
-                chartHeight;
-
-
-            if (
-                index
-                ===
-                0
-            ) {
+            if (index === 0) {
 
                 chartContext.moveTo(
-                    x,
-                    y
+                    point.x,
+                    point.y
                 );
 
             } else {
 
                 chartContext.lineTo(
-                    x,
-                    y
+                    point.x,
+                    point.y
                 );
 
             }
@@ -1971,15 +2410,15 @@ function drawChart() {
 
 
     chartContext.strokeStyle =
-        modelSelect.value === "baseline"
-            ? DEFECT_COLOUR
-            : COOPERATE_COLOUR;
-
+        modelColour;
 
     chartContext.lineWidth = 3;
 
-    chartContext.lineJoin = "round";
-    chartContext.lineCap = "round";
+    chartContext.lineJoin =
+        "round";
+
+    chartContext.lineCap =
+        "round";
 
     chartContext.stroke();
 
@@ -2003,7 +2442,7 @@ function drawChart() {
 
         gradient.addColorStop(
             0,
-            "rgba(192, 96, 130, 0.22)"
+            "rgba(192, 96, 130, 0.23)"
         );
 
         gradient.addColorStop(
@@ -2015,7 +2454,7 @@ function drawChart() {
 
         gradient.addColorStop(
             0,
-            "rgba(123, 111, 214, 0.22)"
+            "rgba(123, 111, 214, 0.23)"
         );
 
         gradient.addColorStop(
@@ -2072,7 +2511,7 @@ function drawChartGrid(
         "#827b88";
 
     chartContext.strokeStyle =
-        "rgba(222, 216, 226, 0.9)";
+        "rgba(222, 216, 226, 0.90)";
 
     chartContext.lineWidth = 1;
 
@@ -2118,7 +2557,9 @@ function drawChartGrid(
             chartContext.stroke();
 
 
-            chartContext.textAlign = "right";
+            chartContext.textAlign =
+                "right";
+
 
             chartContext.fillText(
                 Math.round(
@@ -2136,21 +2577,33 @@ function drawChartGrid(
     );
 
 
-    chartContext.textAlign = "left";
+    chartContext.textAlign =
+        "left";
 
     chartContext.fillText(
-        "Older",
+        "Earlier",
         padding.left,
-        padding.top + chartHeight + 23
+        padding.top
+        +
+        chartHeight
+        +
+        23
     );
 
 
-    chartContext.textAlign = "right";
+    chartContext.textAlign =
+        "right";
 
     chartContext.fillText(
         "Current",
-        padding.left + chartWidth,
-        padding.top + chartHeight + 23
+        padding.left
+        +
+        chartWidth,
+        padding.top
+        +
+        chartHeight
+        +
+        23
     );
 
 
@@ -2159,12 +2612,18 @@ function drawChartGrid(
 }
 
 
+/*
+    ============================================================
+    RUN, PAUSE AND SPEED
+    ============================================================
+*/
+
+
 function startSimulation() {
 
     if (isRunning) {
 
         stopSimulation();
-
         return;
 
     }
@@ -2205,11 +2664,11 @@ function scheduleNextGeneration() {
 
 
     const interval =
-        1100
+        1120
         -
         speed
         *
-        185;
+        190;
 
 
     simulationTimer =
@@ -2217,7 +2676,7 @@ function scheduleNextGeneration() {
             scheduleNextGeneration,
             Math.max(
                 interval,
-                130
+                140
             )
         );
 
@@ -2231,17 +2690,19 @@ function stopSimulation() {
     runButton.textContent =
         "Run";
 
+
     statusText.textContent =
         generation === 0
             ? "Ready"
             : "Paused";
+
 
     statusDot.classList.remove(
         "running"
     );
 
 
-    if (simulationTimer) {
+    if (simulationTimer !== null) {
 
         window.clearTimeout(
             simulationTimer
@@ -2254,33 +2715,59 @@ function stopSimulation() {
 }
 
 
+/*
+    ============================================================
+    CONTROL DISPLAY
+    ============================================================
+*/
+
+
 function updateControlDisplays() {
 
     populationOutput.textContent =
         populationInput.value;
+
 
     assortativityOutput.textContent =
         Number(
             assortativityInput.value
         ).toFixed(2);
 
+
     learningRateOutput.textContent =
         Number(
             learningRateInput.value
         ).toFixed(2);
+
+
+    discountOutput.textContent =
+        Number(
+            discountInput.value
+        ).toFixed(2);
+
 
     temperatureOutput.textContent =
         Number(
             temperatureInput.value
         ).toFixed(2);
 
+
     roundsOutput.textContent =
         roundsInput.value;
+
 
     speedOutput.textContent =
         speedInput.value
         +
         "×";
+
+
+    canvasAssortativity.textContent =
+        "m = "
+        +
+        Number(
+            assortativityInput.value
+        ).toFixed(2);
 
 }
 
@@ -2294,7 +2781,7 @@ function updateModelDescription() {
     ) {
 
         modelExplanation.textContent =
-            "Agents are rematched without learning a separate partner-switching policy.";
+            "Agents learn Prisoner's Dilemma actions but do not learn a separate stay-or-switch policy. Rematching is random with probability 1 − m and assortative with probability m.";
 
         chartModelLabel.textContent =
             "Baseline";
@@ -2305,10 +2792,13 @@ function updateModelDescription() {
         chartModelLabel.style.background =
             "#f8e7ed";
 
+        canvasModelName.textContent =
+            "Baseline model";
+
     } else {
 
         modelExplanation.textContent =
-            "Agents learn whether to remain with or leave their current interaction partner.";
+            "Agents learn both Prisoner's Dilemma actions and whether to remain with or leave their current partner. Agents entering the pool are rematched randomly or assortatively.";
 
         chartModelLabel.textContent =
             "Hybrid";
@@ -2319,12 +2809,66 @@ function updateModelDescription() {
         chartModelLabel.style.background =
             "#ece9fb";
 
+        canvasModelName.textContent =
+            "Hybrid model";
+
     }
 
 
     drawChart();
 
 }
+
+
+/*
+    ============================================================
+    RESEARCH DEFAULT PRESET
+    ============================================================
+*/
+
+
+function applyResearchDefaults() {
+
+    stopSimulation();
+
+
+    modelSelect.value =
+        "hybrid";
+
+    populationInput.value =
+        "20";
+
+    assortativityInput.value =
+        "1";
+
+    learningRateInput.value =
+        "0.05";
+
+    discountInput.value =
+        "1";
+
+    temperatureInput.value =
+        "1";
+
+    roundsInput.value =
+        "20";
+
+    speedInput.value =
+        "3";
+
+
+    updateControlDisplays();
+    updateModelDescription();
+    initialiseSimulation();
+
+}
+
+
+/*
+    ============================================================
+    EVENTS
+    ============================================================
+*/
 
 
 runButton.addEventListener(
@@ -2350,13 +2894,15 @@ resetButton.addEventListener(
 );
 
 
+defaultPresetButton.addEventListener(
+    "click",
+    applyResearchDefaults
+);
+
+
 populationInput.addEventListener(
     "input",
-    function populationChanged() {
-
-        updateControlDisplays();
-
-    }
+    updateControlDisplays
 );
 
 
@@ -2368,11 +2914,21 @@ populationInput.addEventListener(
 
 assortativityInput.addEventListener(
     "input",
-    updateControlDisplays
+    function assortativityChanged() {
+
+        updateControlDisplays();
+
+    }
 );
 
 
 learningRateInput.addEventListener(
+    "input",
+    updateControlDisplays
+);
+
+
+discountInput.addEventListener(
     "input",
     updateControlDisplays
 );
@@ -2411,36 +2967,60 @@ mobileMenuButton.addEventListener(
     "click",
     function toggleMobileMenu() {
 
-        navigation.classList.toggle(
-            "open"
+        const navigationIsOpen =
+            navigation.classList.toggle(
+                "open"
+            );
+
+
+        mobileMenuButton.setAttribute(
+            "aria-expanded",
+            String(
+                navigationIsOpen
+            )
         );
 
     }
 );
 
 
-navigation.querySelectorAll("a").forEach(
-    function addNavigationListener(link) {
+navigation
+    .querySelectorAll("a")
+    .forEach(
+        function addNavigationListener(link) {
 
-        link.addEventListener(
-            "click",
-            function closeNavigation() {
+            link.addEventListener(
+                "click",
+                function closeNavigation() {
 
-                navigation.classList.remove(
-                    "open"
-                );
+                    navigation.classList.remove(
+                        "open"
+                    );
 
-            }
-        );
 
-    }
-);
+                    mobileMenuButton.setAttribute(
+                        "aria-expanded",
+                        "false"
+                    );
+
+                }
+            );
+
+        }
+    );
 
 
 window.addEventListener(
     "resize",
     resizeCanvases
 );
+
+
+/*
+    ============================================================
+    START-UP
+    ============================================================
+*/
 
 
 updateControlDisplays();
