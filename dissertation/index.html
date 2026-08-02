@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="An interactive multi-agent reinforcement learning simulation exploring assortative matching and cooperation."
+    >
+
+    <title>
+        Interactive MARL Laboratory | Yiota Papafiggou
+    </title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header class="site-header">
+
+    <a class="logo" href="#home">
+        YIOTA PAPAFIGGOU
+    </a>
+
+    <button
+        class="mobile-menu-button"
+        id="mobileMenuButton"
+        aria-label="Open navigation"
+    >
+        ☰
+    </button>
+
+    <nav id="navigation">
+        <a href="#simulation">Simulation</a>
+        <a href="#model">Model</a>
+        <a href="#experiments">Experiments</a>
+        <a href="#findings">Findings</a>
+    </nav>
+
+</header>
+
+
+<main>
+
+    <!-- HERO -->
+
+    <section class="hero" id="home">
+
+        <div class="hero-content">
+
+            <p class="eyebrow">
+                MSc Computer Science Research
+            </p>
+
+            <h1>
+                Assortative Matching and the Emergence of Cooperation
+            </h1>
+
+            <p class="hero-description">
+                Explore how reinforcement-learning agents cooperate, defect,
+                learn from rewards and change interaction partners within a
+                repeated Prisoner's Dilemma environment.
+            </p>
+
+            <div class="hero-buttons">
+
+                <a class="button primary-button" href="#simulation">
+                    Launch simulation
+                </a>
+
+                <a class="button secondary-button" href="#model">
+                    Understand the model
+                </a>
+
+            </div>
+
+        </div>
+
+
+        <div class="hero-animation" aria-hidden="true">
+
+            <div class="hero-agent hero-agent-cooperate">
+                C
+            </div>
+
+            <div class="hero-connection"></div>
+
+            <div class="hero-agent hero-agent-defect">
+                D
+            </div>
+
+            <p>
+                Agents learn through repeated interaction
+            </p>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- SIMULATION -->
+
+    <section class="section simulation-section" id="simulation">
+
+        <div class="section-heading">
+
+            <p class="eyebrow">
+                Interactive Laboratory
+            </p>
+
+            <h2>
+                Watch cooperation emerge
+            </h2>
+
+            <p>
+                Change the model and hyperparameters, then observe how agents
+                interact and how cooperation changes over time.
+            </p>
+
+        </div>
+
+
+        <div class="simulation-layout">
+
+            <!-- CONTROLS -->
+
+            <aside class="control-panel">
+
+                <div class="control-panel-heading">
+
+                    <h3>
+                        Simulation controls
+                    </h3>
+
+                    <p>
+                        Adjust the research parameters.
+                    </p>
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <label for="modelSelect">
+                        Model
+                    </label>
+
+                    <select id="modelSelect">
+
+                        <option value="hybrid">
+                            Hybrid model
+                        </option>
+
+                        <option value="baseline">
+                            Baseline model
+                        </option>
+
+                    </select>
+
+                    <p class="control-explanation" id="modelExplanation">
+                        Agents learn whether to remain with or leave their
+                        current interaction partner.
+                    </p>
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="populationInput">
+                            Population size, N
+                        </label>
+
+                        <output id="populationOutput">
+                            20
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="populationInput"
+                        type="range"
+                        min="10"
+                        max="50"
+                        step="2"
+                        value="20"
+                    >
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="assortativityInput">
+                            Assortativity, m
+                        </label>
+
+                        <output id="assortativityOutput">
+                            1.00
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="assortativityInput"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value="1"
+                    >
+
+                    <p class="control-explanation">
+                        Higher values increase the probability of agents with
+                        similar actions being paired.
+                    </p>
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="learningRateInput">
+                            Learning rate, α
+                        </label>
+
+                        <output id="learningRateOutput">
+                            0.05
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="learningRateInput"
+                        type="range"
+                        min="0.01"
+                        max="0.20"
+                        step="0.01"
+                        value="0.05"
+                    >
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="temperatureInput">
+                            Temperature, τ
+                        </label>
+
+                        <output id="temperatureOutput">
+                            1.00
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="temperatureInput"
+                        type="range"
+                        min="0.10"
+                        max="2"
+                        step="0.10"
+                        value="1"
+                    >
+
+                    <p class="control-explanation">
+                        Controls exploration versus exploitation.
+                    </p>
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="roundsInput">
+                            Rounds per partner
+                        </label>
+
+                        <output id="roundsOutput">
+                            20
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="roundsInput"
+                        type="range"
+                        min="2"
+                        max="30"
+                        step="1"
+                        value="20"
+                    >
+
+                </div>
+
+
+                <div class="control-group">
+
+                    <div class="control-label-row">
+
+                        <label for="speedInput">
+                            Simulation speed
+                        </label>
+
+                        <output id="speedOutput">
+                            3×
+                        </output>
+
+                    </div>
+
+                    <input
+                        id="speedInput"
+                        type="range"
+                        min="1"
+                        max="5"
+                        step="1"
+                        value="3"
+                    >
+
+                </div>
+
+
+                <div class="simulation-buttons">
+
+                    <button
+                        class="button primary-button"
+                        id="runButton"
+                        type="button"
+                    >
+                        Run
+                    </button>
+
+                    <button
+                        class="button secondary-button"
+                        id="stepButton"
+                        type="button"
+                    >
+                        Step
+                    </button>
+
+                    <button
+                        class="button reset-button"
+                        id="resetButton"
+                        type="button"
+                    >
+                        Reset
+                    </button>
+
+                </div>
+
+            </aside>
+
+
+
+            <!-- SIMULATION DISPLAY -->
+
+            <div class="simulation-content">
+
+                <div class="simulation-status">
+
+                    <div class="status-left">
+
+                        <span class="status-dot" id="statusDot"></span>
+
+                        <span id="statusText">
+                            Ready
+                        </span>
+
+                    </div>
+
+                    <div>
+                        Generation
+                        <strong id="generationValue">
+                            0
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <div class="canvas-container">
+
+                    <canvas id="agentCanvas"></canvas>
+
+                    <div class="canvas-legend">
+
+                        <span>
+                            <i class="legend-circle cooperate-colour"></i>
+                            Cooperate
+                        </span>
+
+                        <span>
+                            <i class="legend-circle defect-colour"></i>
+                            Defect
+                        </span>
+
+                        <span>
+                            <i class="legend-connection"></i>
+                            Current pair
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div class="metrics-grid">
+
+                    <article class="metric-card">
+
+                        <span>
+                            Cooperation
+                        </span>
+
+                        <strong id="cooperationMetric">
+                            50%
+                        </strong>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <span>
+                            Mean reward
+                        </span>
+
+                        <strong id="rewardMetric">
+                            0.00
+                        </strong>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <span>
+                            Switching
+                        </span>
+
+                        <strong id="switchingMetric">
+                            0%
+                        </strong>
+
+                    </article>
+
+
+                    <article class="metric-card">
+
+                        <span>
+                            Stable pairs
+                        </span>
+
+                        <strong id="stablePairsMetric">
+                            0
+                        </strong>
+
+                    </article>
+
+                </div>
+
+
+                <div class="results-grid">
+
+                    <article class="chart-card">
+
+                        <div class="card-heading">
+
+                            <div>
+
+                                <p class="small-label">
+                                    Live result
+                                </p>
+
+                                <h3>
+                                    Cooperation over time
+                                </h3>
+
+                            </div>
+
+                            <span id="chartModelLabel">
+                                Hybrid
+                            </span>
+
+                        </div>
+
+                        <canvas id="cooperationChart"></canvas>
+
+                    </article>
+
+
+                    <article class="outcomes-card">
+
+                        <div class="card-heading">
+
+                            <div>
+
+                                <p class="small-label">
+                                    Current generation
+                                </p>
+
+                                <h3>
+                                    Interaction outcomes
+                                </h3>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="outcome-row">
+
+                            <span>CC</span>
+
+                            <div class="outcome-bar">
+                                <i id="ccBar"></i>
+                            </div>
+
+                            <strong id="ccValue">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="outcome-row">
+
+                            <span>CD</span>
+
+                            <div class="outcome-bar">
+                                <i id="cdBar"></i>
+                            </div>
+
+                            <strong id="cdValue">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="outcome-row">
+
+                            <span>DC</span>
+
+                            <div class="outcome-bar">
+                                <i id="dcBar"></i>
+                            </div>
+
+                            <strong id="dcValue">
+                                0
+                            </strong>
+
+                        </div>
+
+
+                        <div class="outcome-row">
+
+                            <span>DD</span>
+
+                            <div class="outcome-bar">
+                                <i id="ddBar"></i>
+                            </div>
+
+                            <strong id="ddValue">
+                                0
+                            </strong>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- MODEL -->
+
+    <section class="section" id="model">
+
+        <div class="section-heading narrow-heading">
+
+            <p class="eyebrow">
+                How the model works
+            </p>
+
+            <h2>
+                Learning, interaction and partner choice
+            </h2>
+
+            <p>
+                Each agent learns from its previous interactions while the
+                structure of the population determines who interacts next.
+            </p>
+
+        </div>
+
+
+        <div class="process-grid">
+
+            <article class="process-card">
+
+                <span class="process-number">
+                    01
+                </span>
+
+                <h3>
+                    Agents are paired
+                </h3>
+
+                <p>
+                    Agents begin in pairs and repeatedly play the Prisoner's
+                    Dilemma with their current partner.
+                </p>
+
+            </article>
+
+
+            <article class="process-card">
+
+                <span class="process-number">
+                    02
+                </span>
+
+                <h3>
+                    They cooperate or defect
+                </h3>
+
+                <p>
+                    Each action is selected from learned Q-values using
+                    Boltzmann exploration.
+                </p>
+
+            </article>
+
+
+            <article class="process-card">
+
+                <span class="process-number">
+                    03
+                </span>
+
+                <h3>
+                    Rewards update learning
+                </h3>
+
+                <p>
+                    Interaction rewards influence the probability of choosing
+                    each action in future encounters.
+                </p>
+
+            </article>
+
+
+            <article class="process-card">
+
+                <span class="process-number">
+                    04
+                </span>
+
+                <h3>
+                    Partners may change
+                </h3>
+
+                <p>
+                    The hybrid model learns partner switching while
+                    assortativity influences the rematching process.
+                </p>
+
+            </article>
+
+        </div>
+
+
+        <div class="payoff-section">
+
+            <div class="payoff-text">
+
+                <p class="eyebrow">
+                    Prisoner's Dilemma
+                </p>
+
+                <h3>
+                    Individual temptation versus collective benefit
+                </h3>
+
+                <p>
+                    Mutual cooperation rewards both agents. A defector can
+                    exploit a cooperator, while mutual defection leaves both
+                    agents with a lower reward.
+                </p>
+
+            </div>
+
+
+            <div class="payoff-table-wrapper">
+
+                <table class="payoff-table">
+
+                    <thead>
+
+                        <tr>
+                            <th></th>
+                            <th>Partner C</th>
+                            <th>Partner D</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        <tr>
+                            <th>Agent C</th>
+                            <td>3, 3</td>
+                            <td>0, 5</td>
+                        </tr>
+
+                        <tr>
+                            <th>Agent D</th>
+                            <td>5, 0</td>
+                            <td>1, 1</td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- EXPERIMENTS -->
+
+    <section class="section experiments-section" id="experiments">
+
+        <div class="section-heading">
+
+            <p class="eyebrow">
+                Experimental programme
+            </p>
+
+            <h2>
+                What the dissertation tested
+            </h2>
+
+            <p>
+                The full Python experiments used repeated independent
+                simulations and substantially longer training horizons than
+                the browser demonstration.
+            </p>
+
+        </div>
+
+
+        <div class="experiment-grid">
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    m
+                </span>
+
+                <h3>
+                    Assortativity
+                </h3>
+
+                <p>
+                    0.00, 0.30, 0.50, 0.70 and 1.00
+                </p>
+
+            </article>
+
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    α
+                </span>
+
+                <h3>
+                    Learning rate
+                </h3>
+
+                <p>
+                    0.01, 0.05, 0.10 and 0.20
+                </p>
+
+            </article>
+
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    N
+                </span>
+
+                <h3>
+                    Population size
+                </h3>
+
+                <p>
+                    10, 20, 50 and 100 agents
+                </p>
+
+            </article>
+
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    τ
+                </span>
+
+                <h3>
+                    Temperature
+                </h3>
+
+                <p>
+                    0.10, 0.50 and 1.00
+                </p>
+
+            </article>
+
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    T
+                </span>
+
+                <h3>
+                    Training horizon
+                </h3>
+
+                <p>
+                    50,000, 100,000 and 200,000 steps
+                </p>
+
+            </article>
+
+
+            <article class="experiment-card">
+
+                <span class="experiment-symbol">
+                    −
+                </span>
+
+                <h3>
+                    Ablation studies
+                </h3>
+
+                <p>
+                    Discounting, partner switching and model components
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- FINDINGS -->
+
+    <section class="section" id="findings">
+
+        <div class="section-heading narrow-heading">
+
+            <p class="eyebrow">
+                Research questions
+            </p>
+
+            <h2>
+                What creates stable cooperation?
+            </h2>
+
+            <p>
+                The project investigates when cooperation emerges, how quickly
+                it stabilises and whether partner-selection mechanisms help
+                agents escape persistent defection.
+            </p>
+
+        </div>
+
+
+        <div class="findings-layout">
+
+            <article class="main-finding">
+
+                <p class="eyebrow">
+                    Central comparison
+                </p>
+
+                <h3>
+                    Baseline versus hybrid partner selection
+                </h3>
+
+                <p>
+                    Both systems are evaluated under matched conditions so
+                    that the effects of learned partner switching and
+                    assortative rematching can be examined.
+                </p>
+
+            </article>
+
+
+            <div class="findings-list">
+
+                <article>
+
+                    <strong>
+                        Learning speed
+                    </strong>
+
+                    <span>
+                        At what point does cooperation stabilise?
+                    </span>
+
+                </article>
+
+
+                <article>
+
+                    <strong>
+                        Behavioural dynamics
+                    </strong>
+
+                    <span>
+                        How frequently do agents change strategy or partner?
+                    </span>
+
+                </article>
+
+
+                <article>
+
+                    <strong>
+                        Residual defection
+                    </strong>
+
+                    <span>
+                        Why does cooperation sometimes stop below 100%?
+                    </span>
+
+                </article>
+
+
+                <article>
+
+                    <strong>
+                        Robustness
+                    </strong>
+
+                    <span>
+                        Do the findings persist across different parameters?
+                    </span>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</main>
+
+
+<footer>
+
+    <p>
+        Interactive research demonstration by Yiota Papafiggou
+    </p>
+
+    <p>
+        MSc Computer Science · University of Warwick
+    </p>
+
+</footer>
+
+
+<script src="script.js"></script>
+
+</body>
+</html>
