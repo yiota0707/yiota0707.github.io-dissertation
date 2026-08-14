@@ -1,7 +1,7 @@
 "use strict";
 
 /* ============================================================
-   DISSERTATION CONFIGURATION
+   MODEL SETTINGS
 ============================================================ */
 
 const N_AGENTS = 20;
@@ -15,12 +15,9 @@ const HYBRID = "#7b6fd6";
 const HYBRID_DARK = "#594db4";
 
 
-/*
-    Prisoner's Dilemma reward matrices.
-
-    action 0 = Cooperate
-    action 1 = Defect
-*/
+// Prisoner's Dilemma
+// 0 = cooperate
+// 1 = defect
 
 const REWARD_1 = [
     [3, 0],
@@ -34,7 +31,7 @@ const REWARD_2 = [
 
 
 /* ============================================================
-   SEEDED RANDOMNESS
+   RANDOM NUMBER GENERATOR
 ============================================================ */
 
 function seededRandom(seed) {
@@ -42,51 +39,36 @@ function seededRandom(seed) {
     return function () {
 
         seed |= 0;
-
-        seed =
-            seed + 0x6D2B79F5 | 0;
+        seed = (seed + 0x6D2B79F5) | 0;
 
         let t = seed;
 
-        t =
-            Math.imul(
-                t ^ t >>> 15,
-                t | 1
-            );
+        t = Math.imul(
+            t ^ (t >>> 15),
+            t | 1
+        );
 
-        t ^=
-            t +
-            Math.imul(
-                t ^ t >>> 7,
-                t | 61
-            );
+        t ^= t + Math.imul(
+            t ^ (t >>> 7),
+            t | 61
+        );
 
         return (
-            (
-                t ^ t >>> 14
-            ) >>> 0
+            (t ^ (t >>> 14)) >>> 0
         ) / 4294967296;
     };
 }
 
 
 /* ============================================================
-   GENERAL HELPERS
+   BASIC HELPERS
 ============================================================ */
 
 function stateToIndex(state) {
 
-    if (state === 0) {
-        return 0;
-    }
-
-    if (state === 1) {
-        return 1;
-    }
-
-    if (state === 100) {
-        return 2;
-    }
+    if (state === 0) return 0;
+    if (state === 1) return 1;
+    if (state === 100) return 2;
 
     return 3;
 }
@@ -94,30 +76,18 @@ function stateToIndex(state) {
 
 function shuffle(array, rng) {
 
-    const result =
-        array.slice();
+    const result = array.slice();
 
-    for (
-        let i = result.length - 1;
-        i > 0;
-        i--
-    ) {
+    for (let i = result.length - 1; i > 0; i--) {
 
-        const j =
-            Math.floor(
-                rng() *
-                (i + 1)
-            );
+        const j = Math.floor(
+            rng() * (i + 1)
+        );
 
-        [
-            result[i],
-            result[j]
-        ]
-        =
-        [
-            result[j],
-            result[i]
-        ];
+        const temp = result[i];
+
+        result[i] = result[j];
+        result[j] = temp;
     }
 
     return result;
@@ -126,9 +96,7 @@ function shuffle(array, rng) {
 
 function formatPercent(value) {
 
-    return (
-        value * 100
-    ).toFixed(1) + "%";
+    return (value * 100).toFixed(1) + "%";
 }
 
 
@@ -150,13 +118,10 @@ function createQTable() {
 
 
 /* ============================================================
-   BOLTZMANN ACTION SELECTION
+   ACTION SELECTION
 
-   This intentionally mirrors the supplied Python implementation:
-
-       q0 = tau * Q
-       q1 = tau * Q
-
+   Mirrors the supplied dissertation implementation:
+       exp(tau * Q)
 ============================================================ */
 
 function selectAction(
@@ -167,19 +132,15 @@ function selectAction(
     rng
 ) {
 
-    const si =
-        stateToIndex(state);
+    const si = stateToIndex(state);
 
     const q0 =
-        tau *
-        Q[agent][si][0];
+        tau * Q[agent][si][0];
 
     const q1 =
-        tau *
-        Q[agent][si][1];
+        tau * Q[agent][si][1];
 
-    const maxQ =
-        Math.max(q0, q1);
+    const maxQ = Math.max(q0, q1);
 
     const e0 =
         Math.exp(q0 - maxQ);
@@ -187,16 +148,10 @@ function selectAction(
     const e1 =
         Math.exp(q1 - maxQ);
 
-    const pCooperate =
-        e0 /
-        (e0 + e1);
+    const p0 =
+        e0 / (e0 + e1);
 
-    return (
-        rng() <
-        pCooperate
-    )
-        ? 0
-        : 1;
+    return rng() < p0 ? 0 : 1;
 }
 
 
@@ -204,10 +159,7 @@ function selectAction(
    RANDOM PAIRING
 ============================================================ */
 
-function randomPairsFromIds(
-    ids,
-    rng
-) {
+function randomPairsFromIds(ids, rng) {
 
     const ordered =
         shuffle(ids, rng);
@@ -220,22 +172,17 @@ function randomPairsFromIds(
         i += 2
     ) {
 
-        pairs.push(
-            [
-                ordered[i],
-                ordered[i + 1]
-            ]
-        );
+        pairs.push([
+            ordered[i],
+            ordered[i + 1]
+        ]);
     }
 
     return pairs;
 }
 
 
-function randomPairs(
-    count,
-    rng
-) {
+function randomPairs(count, rng) {
 
     const ids =
         Array.from(
@@ -253,9 +200,8 @@ function randomPairs(
 /* ============================================================
    ASSORTATIVE PAIRING
 
-   Previous C agents are preferentially paired with C.
-   Previous D agents are preferentially paired with D.
-
+   Previous cooperators preferentially pair together.
+   Previous defectors preferentially pair together.
 ============================================================ */
 
 function assortativePairs(
@@ -267,114 +213,64 @@ function assortativePairs(
     const cooperators = [];
     const defectors = [];
 
+    for (const id of ids) {
 
-    for (
-        const id of ids
-    ) {
-
-        if (
-            actionsPD[id] === 0
-        ) {
-
+        if (actionsPD[id] === 0) {
             cooperators.push(id);
-
         } else {
-
             defectors.push(id);
         }
     }
 
 
-    const C =
-        shuffle(
-            cooperators,
-            rng
-        );
-
-    const D =
-        shuffle(
-            defectors,
-            rng
-        );
-
+    const C = shuffle(cooperators, rng);
+    const D = shuffle(defectors, rng);
 
     const pairs = [];
     const leftovers = [];
 
 
-    /* Cooperators */
-
     let i = 0;
 
-    while (
-        i + 1 < C.length
-    ) {
+    while (i + 1 < C.length) {
 
-        pairs.push(
-            [
-                C[i],
-                C[i + 1]
-            ]
-        );
+        pairs.push([
+            C[i],
+            C[i + 1]
+        ]);
 
         i += 2;
     }
 
-
-    if (
-        i < C.length
-    ) {
-
-        leftovers.push(
-            C[i]
-        );
+    if (i < C.length) {
+        leftovers.push(C[i]);
     }
 
-
-    /* Defectors */
 
     i = 0;
 
-    while (
-        i + 1 < D.length
-    ) {
+    while (i + 1 < D.length) {
 
-        pairs.push(
-            [
-                D[i],
-                D[i + 1]
-            ]
-        );
+        pairs.push([
+            D[i],
+            D[i + 1]
+        ]);
 
         i += 2;
     }
 
-
-    if (
-        i < D.length
-    ) {
-
-        leftovers.push(
-            D[i]
-        );
+    if (i < D.length) {
+        leftovers.push(D[i]);
     }
 
 
-    /*
-        If one C and one D are left,
-        they are paired together.
-    */
+    if (leftovers.length >= 2) {
 
-    const leftoverPairs =
-        randomPairsFromIds(
-            leftovers,
-            rng
-        );
-
-
-    pairs.push(
-        ...leftoverPairs
-    );
+        pairs.push([
+            leftovers[0],
+            leftovers[1]
+        ]);
+    }
 
 
     return pairs;
@@ -382,7 +278,7 @@ function assortativePairs(
 
 
 /* ============================================================
-   EXPERIENCE MEMORY
+   MEMORY
 ============================================================ */
 
 function createMemory() {
@@ -402,23 +298,18 @@ function storeExperience(
     reward
 ) {
 
-    memory[agent].push(
-        {
-            state,
-            action,
-            reward
-        }
-    );
+    memory[agent].push({
+        state: state,
+        action: action,
+        reward: reward
+    });
 }
 
 
 /* ============================================================
-   BACKWARD RETURN Q UPDATE
+   Q UPDATE
 
-   running = reward + gamma * running
-
-   Q = (1-alpha)Q + alpha * running
-
+   Same backward-return update as Python code.
 ============================================================ */
 
 function updateQValues(
@@ -438,10 +329,8 @@ function updateQValues(
         const experiences =
             memory[agent];
 
-
         for (
-            let k =
-                experiences.length - 1;
+            let k = experiences.length - 1;
             k >= 0;
             k--
         ) {
@@ -449,25 +338,15 @@ function updateQValues(
             const e =
                 experiences[k];
 
-
             running =
                 e.reward +
-                GAMMA *
-                running;
-
+                GAMMA * running;
 
             const si =
-                stateToIndex(
-                    e.state
-                );
+                stateToIndex(e.state);
 
-
-            Q[agent][si][e.action]
-                =
-                (
-                    1 -
-                    learningRate
-                )
+            Q[agent][si][e.action] =
+                (1 - learningRate)
                 *
                 Q[agent][si][e.action]
                 +
@@ -475,7 +354,6 @@ function updateQValues(
                 *
                 running;
         }
-
 
         memory[agent] = [];
     }
@@ -498,35 +376,23 @@ class Model {
 
     reset() {
 
-        /*
-            Same deterministic starting seed
-            for visual comparability.
-        */
-
         this.rng =
             seededRandom(1235);
-
 
         this.Q =
             createQTable();
 
-
         this.memory =
             createMemory();
-
 
         this.actionsPD =
             Array.from(
                 { length: N_AGENTS },
                 () =>
-                    (
-                        this.rng() <
-                        0.5
-                    )
+                    this.rng() < 0.5
                     ? 0
                     : 1
             );
-
 
         this.groups =
             randomPairs(
@@ -534,41 +400,32 @@ class Model {
                 this.rng
             );
 
-
         this.iteration = 0;
 
         this.cooperation = 0;
 
         this.switchRate =
-            this.type ===
-            "baseline"
-                ? 1
-                : 0;
-
-
-        /*
-            Smooth animation positions.
-        */
+            this.type === "baseline"
+            ? 1
+            : 0;
 
         this.positions =
             Array.from(
                 { length: N_AGENTS },
                 () => ({
-                    x: 0,
-                    y: 0
+                    x: 0.5,
+                    y: 0.5
                 })
             );
-
 
         this.targets =
             Array.from(
                 { length: N_AGENTS },
                 () => ({
-                    x: 0,
-                    y: 0
+                    x: 0.5,
+                    y: 0.5
                 })
             );
-
 
         assignPairTargets(this);
 
@@ -588,7 +445,7 @@ class Model {
 
 
     /* ========================================================
-       BASELINE REMATCH
+       BASELINE REMATCHING
     ======================================================== */
 
     baselineRematch(m) {
@@ -599,10 +456,7 @@ class Model {
                 (_, i) => i
             );
 
-
-        if (
-            this.rng() < m
-        ) {
+        if (this.rng() < m) {
 
             this.groups =
                 assortativePairs(
@@ -623,33 +477,22 @@ class Model {
 
 
     /* ========================================================
-       HYBRID STAY/SWITCH + REMATCH
+       HYBRID PARTNER RETENTION
     ======================================================== */
 
-    hybridRematch(
-        m,
-        tau
-    ) {
+    hybridRematch(m, tau) {
 
         const stayingPairs = [];
-
         const switchingAgents = [];
 
         let switchCount = 0;
 
 
-        for (
-            const pair of this.groups
-        ) {
+        for (const pair of this.groups) {
 
             const i = pair[0];
             const j = pair[1];
 
-
-            /*
-                Switching state:
-                partner's previous PD action.
-            */
 
             const stateI =
                 this.actionsPD[j];
@@ -658,7 +501,7 @@ class Model {
                 this.actionsPD[i];
 
 
-            const switchI =
+            const actionI =
                 selectAction(
                     this.Q,
                     i,
@@ -667,8 +510,7 @@ class Model {
                     this.rng
                 );
 
-
-            const switchJ =
+            const actionJ =
                 selectAction(
                     this.Q,
                     j,
@@ -678,47 +520,40 @@ class Model {
                 );
 
 
-            /*
-                Switching experiences have
-                zero immediate reward.
-            */
-
             storeExperience(
                 this.memory,
                 i,
                 stateI,
-                switchI,
+                actionI,
                 0
             );
-
 
             storeExperience(
                 this.memory,
                 j,
                 stateJ,
-                switchJ,
+                actionJ,
                 0
             );
 
 
             switchCount +=
-                switchI +
-                switchJ;
+                actionI + actionJ;
 
 
             /*
-                Pair survives ONLY if
-                both agents choose stay.
+                Both must choose stay.
             */
 
             if (
-                switchI === 0 &&
-                switchJ === 0
+                actionI === 0 &&
+                actionJ === 0
             ) {
 
-                stayingPairs.push(
-                    [i, j]
-                );
+                stayingPairs.push([
+                    i,
+                    j
+                ]);
 
             } else {
 
@@ -728,18 +563,14 @@ class Model {
         }
 
 
-        let newPairs = [];
+        let rematched = [];
 
 
-        if (
-            switchingAgents.length > 0
-        ) {
+        if (switchingAgents.length > 0) {
 
-            if (
-                this.rng() < m
-            ) {
+            if (this.rng() < m) {
 
-                newPairs =
+                rematched =
                     assortativePairs(
                         switchingAgents,
                         this.actionsPD,
@@ -748,7 +579,7 @@ class Model {
 
             } else {
 
-                newPairs =
+                rematched =
                     randomPairsFromIds(
                         switchingAgents,
                         this.rng
@@ -759,7 +590,7 @@ class Model {
 
         this.groups = [
             ...stayingPairs,
-            ...newPairs
+            ...rematched
         ];
 
 
@@ -771,7 +602,7 @@ class Model {
 
 
     /* ========================================================
-       ONE TRAINING ITERATION
+       ONE ITERATION
     ======================================================== */
 
     step(
@@ -790,23 +621,17 @@ class Model {
 
         for (
             let round = 0;
-            round <
-            ROUNDS_PER_ITERATION;
+            round < ROUNDS_PER_ITERATION;
             round++
         ) {
 
             /*
-                Relationship stage.
+                Relationship stage
             */
 
-            if (
-                this.type ===
-                "baseline"
-            ) {
+            if (this.type === "baseline") {
 
-                this.baselineRematch(
-                    m
-                );
+                this.baselineRematch(m);
 
                 switchSum += 1;
 
@@ -821,13 +646,10 @@ class Model {
 
 
             /*
-                Prisoner's Dilemma stage.
+                PD interaction
             */
 
-            for (
-                const pair of
-                this.groups
-            ) {
+            for (const pair of this.groups) {
 
                 const a = pair[0];
                 const b = pair[1];
@@ -840,20 +662,11 @@ class Model {
                     this.actionsPD[b];
 
 
-                /*
-                    PD state:
-
-                    100 = partner previously C
-                    101 = partner previously D
-                */
-
                 const stateA =
-                    100 +
-                    previousB;
+                    100 + previousB;
 
                 const stateB =
-                    100 +
-                    previousA;
+                    100 + previousA;
 
 
                 const actionA =
@@ -864,7 +677,6 @@ class Model {
                         tau,
                         this.rng
                     );
-
 
                 const actionB =
                     selectAction(
@@ -878,14 +690,13 @@ class Model {
 
                 const rewardA =
                     REWARD_1
-                        [actionA]
-                        [actionB];
-
+                    [actionA]
+                    [actionB];
 
                 const rewardB =
                     REWARD_2
-                        [actionA]
-                        [actionB];
+                    [actionA]
+                    [actionB];
 
 
                 storeExperience(
@@ -895,7 +706,6 @@ class Model {
                     actionA,
                     rewardA
                 );
-
 
                 storeExperience(
                     this.memory,
@@ -942,11 +752,6 @@ class Model {
         }
 
 
-        /*
-            Exactly as in model:
-            update after repeated game.
-        */
-
         updateQValues(
             this.Q,
             this.memory,
@@ -955,15 +760,12 @@ class Model {
 
 
         const games =
-            CC +
-            CD +
-            DC +
-            DD;
+            CC + CD + DC + DD;
 
 
-        this.cooperation =
-            games > 0
-                ?
+        if (games > 0) {
+
+            this.cooperation =
                 (
                     2 * CC +
                     CD +
@@ -971,11 +773,13 @@ class Model {
                 )
                 /
                 (
-                    2 *
-                    games
-                )
-                :
-                0;
+                    2 * games
+                );
+
+        } else {
+
+            this.cooperation = 0;
+        }
 
 
         this.switchRate =
@@ -986,65 +790,51 @@ class Model {
         this.iteration++;
 
 
-        assignPairTargets(
-            this
-        );
+        assignPairTargets(this);
     }
 
 
     cooperatorCount() {
 
-        let total = 0;
+        let count = 0;
 
         for (
             const action of
             this.actionsPD
         ) {
 
-            if (
-                action === 0
-            ) {
-                total++;
+            if (action === 0) {
+                count++;
             }
         }
 
-        return total;
+        return count;
     }
 }
 
 
 /* ============================================================
-   PAIR DISPLAY LAYOUT
-
-   Each current partnership occupies a visible slot.
-
-   This is what makes rematching obvious:
-   agents physically move into different pair positions.
+   VISUAL PAIR POSITIONS
 ============================================================ */
 
 function assignPairTargets(model) {
 
-    /*
-        10 partnership slots:
-        2 columns × 5 rows.
-    */
+    const slots = [
 
-    const pairSlots = [
+        { x: 0.25, y: 0.16 },
+        { x: 0.75, y: 0.16 },
 
-        { x: 0.25, y: 0.15 },
-        { x: 0.75, y: 0.15 },
+        { x: 0.25, y: 0.33 },
+        { x: 0.75, y: 0.33 },
 
-        { x: 0.25, y: 0.32 },
-        { x: 0.75, y: 0.32 },
+        { x: 0.25, y: 0.50 },
+        { x: 0.75, y: 0.50 },
 
-        { x: 0.25, y: 0.49 },
-        { x: 0.75, y: 0.49 },
+        { x: 0.25, y: 0.67 },
+        { x: 0.75, y: 0.67 },
 
-        { x: 0.25, y: 0.66 },
-        { x: 0.75, y: 0.66 },
-
-        { x: 0.25, y: 0.83 },
-        { x: 0.75, y: 0.83 }
+        { x: 0.25, y: 0.84 },
+        { x: 0.75, y: 0.84 }
 
     ];
 
@@ -1053,43 +843,19 @@ function assignPairTargets(model) {
         (pair, index) => {
 
             const slot =
-                pairSlots[index];
+                slots[index];
+
+            if (!slot) return;
 
 
-            if (!slot) {
-                return;
-            }
-
-
-            /*
-                Both partners shown close together.
-            */
-
-            model.targets[
-                pair[0]
-            ] = {
-
-                x:
-                    slot.x -
-                    0.055,
-
-                y:
-                    slot.y
-
+            model.targets[pair[0]] = {
+                x: slot.x - 0.06,
+                y: slot.y
             };
 
-
-            model.targets[
-                pair[1]
-            ] = {
-
-                x:
-                    slot.x +
-                    0.055,
-
-                y:
-                    slot.y
-
+            model.targets[pair[1]] = {
+                x: slot.x + 0.06,
+                y: slot.y
             };
         }
     );
@@ -1097,7 +863,7 @@ function assignPairTargets(model) {
 
 
 /* ============================================================
-   CANVAS DRAWING
+   CANVAS RESIZING
 ============================================================ */
 
 function resizeCanvas(canvas) {
@@ -1105,37 +871,25 @@ function resizeCanvas(canvas) {
     const rect =
         canvas.getBoundingClientRect();
 
-    const scale =
-        window.devicePixelRatio ||
-        1;
+    const ratio =
+        window.devicePixelRatio || 1;
 
 
-    if (
-        canvas.width !==
-        Math.floor(
-            rect.width *
-            scale
-        )
-        ||
-        canvas.height !==
-        Math.floor(
-            rect.height *
-            scale
-        )
-    ) {
-
-        canvas.width =
+    canvas.width =
+        Math.max(
+            1,
             Math.floor(
-                rect.width *
-                scale
-            );
+                rect.width * ratio
+            )
+        );
 
-        canvas.height =
+    canvas.height =
+        Math.max(
+            1,
             Math.floor(
-                rect.height *
-                scale
-            );
-    }
+                rect.height * ratio
+            )
+        );
 
 
     const ctx =
@@ -1143,10 +897,10 @@ function resizeCanvas(canvas) {
 
 
     ctx.setTransform(
-        scale,
+        ratio,
         0,
         0,
-        scale,
+        ratio,
         0,
         0
     );
@@ -1161,7 +915,89 @@ function resizeCanvas(canvas) {
 
 
 /* ============================================================
-   ANIMATION
+   MANUAL ROUNDED RECTANGLE
+
+   Avoids ctx.roundRect browser compatibility problems.
+============================================================ */
+
+function drawRoundedRect(
+    ctx,
+    x,
+    y,
+    width,
+    height,
+    radius
+) {
+
+    const r =
+        Math.min(
+            radius,
+            width / 2,
+            height / 2
+        );
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x + r,
+        y
+    );
+
+    ctx.lineTo(
+        x + width - r,
+        y
+    );
+
+    ctx.quadraticCurveTo(
+        x + width,
+        y,
+        x + width,
+        y + r
+    );
+
+    ctx.lineTo(
+        x + width,
+        y + height - r
+    );
+
+    ctx.quadraticCurveTo(
+        x + width,
+        y + height,
+        x + width - r,
+        y + height
+    );
+
+    ctx.lineTo(
+        x + r,
+        y + height
+    );
+
+    ctx.quadraticCurveTo(
+        x,
+        y + height,
+        x,
+        y + height - r
+    );
+
+    ctx.lineTo(
+        x,
+        y + r
+    );
+
+    ctx.quadraticCurveTo(
+        x,
+        y,
+        x + r,
+        y
+    );
+
+    ctx.closePath();
+}
+
+
+/* ============================================================
+   POSITION ANIMATION
 ============================================================ */
 
 function animatePositions(model) {
@@ -1172,30 +1008,23 @@ function animatePositions(model) {
         i++
     ) {
 
-        model.positions[i].x
-            +=
+        model.positions[i].x +=
             (
                 model.targets[i].x -
                 model.positions[i].x
-            )
-            *
-            0.14;
+            ) * 0.12;
 
-
-        model.positions[i].y
-            +=
+        model.positions[i].y +=
             (
                 model.targets[i].y -
                 model.positions[i].y
-            )
-            *
-            0.14;
+            ) * 0.12;
     }
 }
 
 
 /* ============================================================
-   DRAW ONE MODEL
+   DRAW MODEL
 ============================================================ */
 
 function drawModel(
@@ -1205,12 +1034,17 @@ function drawModel(
     darkColour
 ) {
 
-    const {
-        ctx,
-        width,
-        height
-    } =
+    const size =
         resizeCanvas(canvas);
+
+    const ctx =
+        size.ctx;
+
+    const width =
+        size.width;
+
+    const height =
+        size.height;
 
 
     ctx.clearRect(
@@ -1221,67 +1055,55 @@ function drawModel(
     );
 
 
-    animatePositions(
-        model
-    );
+    animatePositions(model);
 
 
     /*
-        Pairing boxes.
+        10 partnership slots
     */
 
-    ctx.strokeStyle =
-        "rgba(110,105,120,0.08)";
-
-    ctx.lineWidth = 1;
-
-
     const slotYs = [
-        0.15,
-        0.32,
-        0.49,
-        0.66,
-        0.83
+        0.16,
+        0.33,
+        0.50,
+        0.67,
+        0.84
     ];
 
 
-    for (
-        const yNorm of
-        slotYs
-    ) {
+    ctx.lineWidth = 1;
 
-        for (
-            const xNorm of
-            [0.25, 0.75]
-        ) {
+    ctx.strokeStyle =
+        "rgba(70, 65, 80, 0.09)";
+
+
+    for (const y of slotYs) {
+
+        for (const x of [0.25, 0.75]) {
 
             const boxWidth =
-                width * 0.32;
+                width * 0.34;
 
             const boxHeight =
-                58;
-
+                62;
 
             const bx =
-                width *
-                xNorm -
+                x * width -
                 boxWidth / 2;
 
             const by =
-                height *
-                yNorm -
+                y * height -
                 boxHeight / 2;
 
 
-            roundedRect(
+            drawRoundedRect(
                 ctx,
                 bx,
                 by,
                 boxWidth,
                 boxHeight,
-                11
+                12
             );
-
 
             ctx.stroke();
         }
@@ -1289,20 +1111,17 @@ function drawModel(
 
 
     /*
-        Draw partnership lines first.
+        Partnership lines
     */
 
-    for (
-        const pair of
-        model.groups
-    ) {
+    for (const pair of model.groups) {
 
-        const first =
+        const p1 =
             model.positions[
                 pair[0]
             ];
 
-        const second =
+        const p2 =
             model.positions[
                 pair[1]
             ];
@@ -1310,70 +1129,59 @@ function drawModel(
 
         ctx.beginPath();
 
-
         ctx.moveTo(
-            first.x * width,
-            first.y * height
+            p1.x * width,
+            p1.y * height
         );
-
 
         ctx.lineTo(
-            second.x * width,
-            second.y * height
+            p2.x * width,
+            p2.y * height
         );
-
 
         ctx.strokeStyle =
             colour;
 
         ctx.globalAlpha =
-            model.type ===
-            "baseline"
-                ? 0.55
-                : 0.68;
+            0.55;
 
-        ctx.lineWidth = 4;
+        ctx.lineWidth =
+            4;
 
         ctx.stroke();
 
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha =
+            1;
     }
 
 
     /*
-        Agents.
+        Draw 20 agents
     */
 
     for (
         let agent = 0;
-        agent <
-        N_AGENTS;
+        agent < N_AGENTS;
         agent++
     ) {
 
         const position =
-            model.positions[
-                agent
-            ];
+            model.positions[agent];
 
 
         const x =
-            position.x *
-            width;
+            position.x * width;
 
         const y =
-            position.y *
-            height;
+            position.y * height;
 
 
         const cooperating =
-            model.actionsPD[
-                agent
-            ] === 0;
+            model.actionsPD[agent] === 0;
 
 
         /*
-            Shadow.
+            Shadow
         */
 
         ctx.beginPath();
@@ -1381,19 +1189,19 @@ function drawModel(
         ctx.arc(
             x,
             y + 3,
-            21,
+            22,
             0,
             Math.PI * 2
         );
 
         ctx.fillStyle =
-            "rgba(40,35,50,0.08)";
+            "rgba(30, 25, 40, 0.10)";
 
         ctx.fill();
 
 
         /*
-            Node.
+            Agent node
         */
 
         ctx.beginPath();
@@ -1401,7 +1209,7 @@ function drawModel(
         ctx.arc(
             x,
             y,
-            20,
+            21,
             0,
             Math.PI * 2
         );
@@ -1409,17 +1217,17 @@ function drawModel(
 
         ctx.fillStyle =
             cooperating
-                ? colour
-                : "#ffffff";
-
+            ? colour
+            : "#ffffff";
 
         ctx.fill();
 
 
-        ctx.lineWidth = 3;
-
         ctx.strokeStyle =
             darkColour;
+
+        ctx.lineWidth =
+            3;
 
         ctx.stroke();
 
@@ -1428,8 +1236,13 @@ function drawModel(
             C / D
         */
 
+        ctx.fillStyle =
+            cooperating
+            ? "#ffffff"
+            : darkColour;
+
         ctx.font =
-            "700 12px Inter, sans-serif";
+            "bold 13px Arial";
 
         ctx.textAlign =
             "center";
@@ -1437,86 +1250,47 @@ function drawModel(
         ctx.textBaseline =
             "middle";
 
-
-        ctx.fillStyle =
-            cooperating
-                ? "#ffffff"
-                : darkColour;
-
-
         ctx.fillText(
             cooperating
-                ? "C"
-                : "D",
+            ? "C"
+            : "D",
             x,
             y
         );
 
 
         /*
-            Tiny agent number.
+            Agent number
         */
 
-        ctx.font =
-            "9px Inter, sans-serif";
-
         ctx.fillStyle =
-            "#9a96a0";
+            "#8f8b96";
 
+        ctx.font =
+            "10px Arial";
 
         ctx.fillText(
-            String(
-                agent + 1
-            ),
+            String(agent + 1),
             x,
-            y + 34
+            y + 35
         );
     }
 }
 
 
 /* ============================================================
-   ROUNDED RECT
-============================================================ */
-
-function roundedRect(
-    ctx,
-    x,
-    y,
-    width,
-    height,
-    radius
-) {
-
-    ctx.beginPath();
-
-    ctx.roundRect(
-        x,
-        y,
-        width,
-        height,
-        radius
-    );
-}
-
-
-/* ============================================================
-   MODELS
+   CREATE MODELS
 ============================================================ */
 
 const baselineModel =
-    new Model(
-        "baseline"
-    );
+    new Model("baseline");
 
 const hybridModel =
-    new Model(
-        "hybrid"
-    );
+    new Model("hybrid");
 
 
 /* ============================================================
-   ELEMENTS
+   DOM ELEMENTS
 ============================================================ */
 
 const baselineCanvas =
@@ -1587,15 +1361,14 @@ const resetButton =
         "resetButton"
     );
 
-
-const status =
+const statusElement =
     document.getElementById(
         "status"
     );
 
 
 /* ============================================================
-   METRICS
+   UPDATE TEXT
 ============================================================ */
 
 function updateMetrics() {
@@ -1603,73 +1376,62 @@ function updateMetrics() {
     document.getElementById(
         "baselineIteration"
     ).textContent =
-        baselineModel
-            .iteration
-            .toLocaleString();
+        baselineModel.iteration;
 
 
     document.getElementById(
         "hybridIteration"
     ).textContent =
-        hybridModel
-            .iteration
-            .toLocaleString();
+        hybridModel.iteration;
 
 
     document.getElementById(
         "baselineCooperation"
     ).textContent =
         baselineModel.iteration === 0
-            ? "—"
-            :
-            formatPercent(
-                baselineModel.cooperation
-            );
+        ? "—"
+        : formatPercent(
+            baselineModel.cooperation
+        );
 
 
     document.getElementById(
         "hybridCooperation"
     ).textContent =
         hybridModel.iteration === 0
-            ? "—"
-            :
-            formatPercent(
-                hybridModel.cooperation
-            );
+        ? "—"
+        : formatPercent(
+            hybridModel.cooperation
+        );
 
 
     document.getElementById(
         "baselineCooperators"
     ).textContent =
-        baselineModel
-            .cooperatorCount()
-        +
-        " / 20";
+        baselineModel.cooperatorCount()
+        + " / 20";
 
 
     document.getElementById(
         "hybridCooperators"
     ).textContent =
-        hybridModel
-            .cooperatorCount()
-        +
-        " / 20";
+        hybridModel.cooperatorCount()
+        + " / 20";
 
 
     document.getElementById(
         "hybridSwitching"
     ).textContent =
         hybridModel.iteration === 0
-            ? "—"
-            :
-            formatPercent(
-                hybridModel.switchRate
-            );
+        ? "—"
+        : formatPercent(
+            hybridModel.switchRate
+        );
 }
 
 
 /* ============================================================
-   RENDER
+   RENDER LOOP
 ============================================================ */
 
 function render() {
@@ -1694,24 +1456,30 @@ function render() {
 }
 
 
-/* ============================================================
-   SIMULATION TIMER
+function visualLoop() {
 
-   Simulation steps are intentionally separated from the
-   visual animation loop so agents visibly move between pairs.
+    render();
+
+    window.requestAnimationFrame(
+        visualLoop
+    );
+}
+
+
+window.requestAnimationFrame(
+    visualLoop
+);
+
+
+/* ============================================================
+   SIMULATION LOOP
 ============================================================ */
 
 let running = false;
+let timer = null;
 
-let simulationTimer = null;
 
-
-/*
-    Every simulation tick executes the number
-    of iterations selected by "speed".
-*/
-
-function runSimulationTick() {
+function simulationTick() {
 
     if (!running) {
         return;
@@ -1723,18 +1491,15 @@ function runSimulationTick() {
             mSlider.value
         );
 
-
     const alpha =
         Number(
             alphaSlider.value
         );
 
-
     const tau =
         Number(
             tauSlider.value
         );
-
 
     const speed =
         Number(
@@ -1742,25 +1507,19 @@ function runSimulationTick() {
         );
 
 
-    /*
-        Keep visual motion readable.
-
-        Higher speed executes more training
-        iterations per simulation tick.
-    */
-
-    const steps =
+    const iterationsPerTick =
         Math.max(
             1,
             Math.ceil(
-                speed / 3
+                speed / 4
             )
         );
 
 
     for (
         let i = 0;
-        i < steps;
+        i <
+        iterationsPerTick;
         i++
     ) {
 
@@ -1770,7 +1529,6 @@ function runSimulationTick() {
             tau
         );
 
-
         hybridModel.step(
             m,
             alpha,
@@ -1779,60 +1537,35 @@ function runSimulationTick() {
     }
 
 
-    /*
-        Delay shrinks as speed increases.
-    */
-
     const delay =
         Math.max(
-            70,
-            550 -
-            speed * 18
+            80,
+            600 -
+            speed * 20
         );
 
 
-    simulationTimer =
-        setTimeout(
-            runSimulationTick,
+    timer =
+        window.setTimeout(
+            simulationTick,
             delay
         );
 }
 
 
 /* ============================================================
-   VISUAL LOOP
-============================================================ */
-
-function animationLoop() {
-
-    render();
-
-    requestAnimationFrame(
-        animationLoop
-    );
-}
-
-
-requestAnimationFrame(
-    animationLoop
-);
-
-
-/* ============================================================
-   RUN BUTTON
+   RUN
 ============================================================ */
 
 runButton.addEventListener(
     "click",
-    () => {
+    function () {
 
         if (running) {
             return;
         }
 
-
         running = true;
-
 
         runButton.disabled =
             true;
@@ -1841,15 +1574,15 @@ runButton.addEventListener(
             false;
 
 
-        status.textContent =
+        statusElement.textContent =
             "Running";
 
-        status.classList.add(
+        statusElement.classList.add(
             "running"
         );
 
 
-        runSimulationTick();
+        simulationTick();
     }
 );
 
@@ -1860,21 +1593,16 @@ runButton.addEventListener(
 
 pauseButton.addEventListener(
     "click",
-    () => {
+    function () {
 
         running = false;
 
 
-        if (
-            simulationTimer
-        ) {
+        if (timer !== null) {
 
-            clearTimeout(
-                simulationTimer
-            );
+            clearTimeout(timer);
 
-            simulationTimer =
-                null;
+            timer = null;
         }
 
 
@@ -1885,10 +1613,10 @@ pauseButton.addEventListener(
             true;
 
 
-        status.textContent =
+        statusElement.textContent =
             "Paused";
 
-        status.classList.remove(
+        statusElement.classList.remove(
             "running"
         );
     }
@@ -1901,26 +1629,20 @@ pauseButton.addEventListener(
 
 resetButton.addEventListener(
     "click",
-    () => {
+    function () {
 
         running = false;
 
 
-        if (
-            simulationTimer
-        ) {
+        if (timer !== null) {
 
-            clearTimeout(
-                simulationTimer
-            );
+            clearTimeout(timer);
 
-            simulationTimer =
-                null;
+            timer = null;
         }
 
 
         baselineModel.reset();
-
         hybridModel.reset();
 
 
@@ -1931,10 +1653,10 @@ resetButton.addEventListener(
             true;
 
 
-        status.textContent =
+        statusElement.textContent =
             "Ready";
 
-        status.classList.remove(
+        statusElement.classList.remove(
             "running"
         );
 
@@ -1945,51 +1667,48 @@ resetButton.addEventListener(
 
 
 /* ============================================================
-   CONTROL LABELS
+   SLIDERS
 ============================================================ */
 
 mSlider.addEventListener(
     "input",
-    () => {
+    function () {
 
         mValue.textContent =
             Number(
                 mSlider.value
-            )
-            .toFixed(2);
+            ).toFixed(2);
     }
 );
 
 
 alphaSlider.addEventListener(
     "input",
-    () => {
+    function () {
 
         alphaValue.textContent =
             Number(
                 alphaSlider.value
-            )
-            .toFixed(2);
+            ).toFixed(2);
     }
 );
 
 
 tauSlider.addEventListener(
     "input",
-    () => {
+    function () {
 
         tauValue.textContent =
             Number(
                 tauSlider.value
-            )
-            .toFixed(2);
+            ).toFixed(2);
     }
 );
 
 
 speedSlider.addEventListener(
     "input",
-    () => {
+    function () {
 
         speedValue.textContent =
             speedSlider.value +
@@ -1999,7 +1718,11 @@ speedSlider.addEventListener(
 
 
 /* ============================================================
-   INITIAL DISPLAY
+   START
 ============================================================ */
 
 render();
+
+console.log(
+    "Dissertation simulation loaded successfully."
+);
