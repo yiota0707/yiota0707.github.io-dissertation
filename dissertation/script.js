@@ -1,1278 +1,584 @@
 "use strict";
 
 
-/* ============================================================
-   PRIMARY DISSERTATION CONFIGURATION
-============================================================ */
+/* =========================================================
+   BASIC SETTINGS
+========================================================= */
 
-const N_AGENTS = 20;
-const ROUNDS = 20;
+const N = 20;
 
-const ALPHA = 0.05;
-const TAU = 1.0;
-const GAMMA = 1.0;
+const BASELINE_COLOUR = "#c06082";
+const HYBRID_COLOUR = "#7b6fd6";
 
-const TRAINING_HORIZON = 100000;
-const N_SIM = 10;
+let m = 0.7;
 
+let running = false;
+let paused = false;
 
-/*
-    These are the exact reported means from the
-    dissertation primary assortativity experiment.
-*/
+let stage = 0;
 
-const DISSERTATION_RESULTS = {
-
-    "0.0": {
-        baseline: 0.258,
-        hybrid: 0.766
-    },
-
-    "0.3": {
-        baseline: 0.076,
-        hybrid: 0.788
-    },
-
-    "0.5": {
-        baseline: 0.064,
-        hybrid: 0.715
-    },
-
-    "0.7": {
-        baseline: 0.052,
-        hybrid: 0.717
-    },
-
-    "1.0": {
-        baseline: 0.039,
-        hybrid: 0.716
-    }
-
-};
+let timer = null;
 
 
-/*
-    PD payoff matrices from the authoritative code.
+/* =========================================================
+   RANDOM HELPERS
+========================================================= */
 
-    action 0 = cooperate
-    action 1 = defect
-*/
+function shuffle(array) {
 
-const REWARD_1 = [
-    [3, 0],
-    [5, 1]
-];
+    const output = [...array];
 
-const REWARD_2 = [
-    [3, 5],
-    [0, 1]
-];
+    for (let i = output.length - 1; i > 0; i--) {
 
+        const j = Math.floor(
+            Math.random() * (i + 1)
+        );
 
-/* ============================================================
-   RANDOMNESS
-============================================================ */
-
-function seededRandom(seed) {
-
-    return function () {
-
-        seed |= 0;
-
-        seed =
-            (
-                seed +
-                0x6D2B79F5
-            )
-            | 0;
-
-        let t = seed;
-
-        t =
-            Math.imul(
-                t ^ (t >>> 15),
-                t | 1
-            );
-
-        t ^=
-            t +
-            Math.imul(
-                t ^ (t >>> 7),
-                t | 61
-            );
-
-        return (
-            (
-                t ^
-                (t >>> 14)
-            )
-            >>> 0
-        )
-        /
-        4294967296;
-    };
-}
-
-
-/* ============================================================
-   HELPERS
-============================================================ */
-
-function stateToIndex(state) {
-
-    if (state === 0) {
-        return 0;
-    }
-
-    if (state === 1) {
-        return 1;
-    }
-
-    if (state === 100) {
-        return 2;
-    }
-
-    return 3;
-}
-
-
-function shuffle(values, rng) {
-
-    const output =
-        values.slice();
-
-    for (
-        let i =
-            output.length - 1;
-        i > 0;
-        i--
-    ) {
-
-        const j =
-            Math.floor(
-                rng() *
-                (i + 1)
-            );
-
-        const temp =
-            output[i];
-
-        output[i] =
-            output[j];
-
-        output[j] =
-            temp;
+        [
+            output[i],
+            output[j]
+        ] = [
+            output[j],
+            output[i]
+        ];
     }
 
     return output;
 }
 
 
-function formatPercent(value) {
+function wait(callback, time = 1800) {
 
-    return (
-        value *
-        100
-    ).toFixed(1) + "%";
+    clearTimeout(timer);
+
+    timer = setTimeout(() => {
+
+        if (!running || paused) {
+            return;
+        }
+
+        callback();
+
+    }, time);
 }
 
 
-/* ============================================================
-   Q TABLE
-============================================================ */
+/* =========================================================
+   MODEL CREATION
+========================================================= */
 
-function createQTable() {
+function createModel(type) {
 
-    return Array.from(
+    const agents = [];
 
-        {
-            length: N_AGENTS
-        },
+    for (let i = 0; i < N; i++) {
 
-        () =>
+        agents.push({
 
-            Array.from(
+            id: i,
 
-                {
-                    length: 4
-                },
+            action:
+                Math.random() < 0.5
+                    ? "C"
+                    : "D",
 
-                () => [
-                    0,
-                    0
-                ]
+            decision: null,
 
-            )
+            retained: false,
 
-    );
-}
-
-
-/* ============================================================
-   BOLTZMANN ACTION SELECTION
-
-   Matches supplied implementation:
-
-       q0 = tau * Q
-       q1 = tau * Q
-
-============================================================ */
-
-function selectAction(
-    Q,
-    agent,
-    state,
-    rng
-) {
-
-    const si =
-        stateToIndex(state);
-
-
-    const q0 =
-        TAU *
-        Q[agent][si][0];
-
-
-    const q1 =
-        TAU *
-        Q[agent][si][1];
-
-
-    const maxQ =
-        Math.max(
-            q0,
-            q1
-        );
-
-
-    const e0 =
-        Math.exp(
-            q0 -
-            maxQ
-        );
-
-
-    const e1 =
-        Math.exp(
-            q1 -
-            maxQ
-        );
-
-
-    const p0 =
-        e0 /
-        (
-            e0 +
-            e1
-        );
-
-
-    return (
-        rng() <
-        p0
-    )
-        ?
-        0
-        :
-        1;
-}
-
-
-/* ============================================================
-   PAIRING
-============================================================ */
-
-function randomPairsFromIds(
-    ids,
-    rng
-) {
-
-    const shuffled =
-        shuffle(
-            ids,
-            rng
-        );
-
-
-    const pairs = [];
-
-
-    for (
-        let i = 0;
-        i + 1 <
-        shuffled.length;
-        i += 2
-    ) {
-
-        pairs.push(
-            [
-                shuffled[i],
-                shuffled[i + 1]
-            ]
-        );
+            inPool: false
+        });
     }
 
 
-    return pairs;
+    return {
+
+        type,
+
+        agents,
+
+        pairs: makeRandomPairs(
+            agents.map(a => a.id)
+        ),
+
+        oldPairs: []
+    };
 }
 
 
-function randomPairs(rng) {
-
-    const ids =
-        Array.from(
-            {
-                length: N_AGENTS
-            },
-            (_, i) => i
-        );
+let baseline = createModel("baseline");
+let hybrid = createModel("hybrid");
 
 
-    return randomPairsFromIds(
-        ids,
-        rng
-    );
+/* =========================================================
+   PAIRING
+========================================================= */
+
+function makeRandomPairs(ids) {
+
+    const shuffled = shuffle(ids);
+
+    const pairs = [];
+
+    for (
+        let i = 0;
+        i + 1 < shuffled.length;
+        i += 2
+    ) {
+
+        pairs.push([
+            shuffled[i],
+            shuffled[i + 1]
+        ]);
+    }
+
+    return pairs;
 }
 
 
 /*
-    Behavioural assortativity:
-    previous C with previous C,
-    previous D with previous D,
-    wherever possible.
+    Assortative matching in this visualisation uses
+    the previous PD action:
+
+        C with C
+        D with D
+
+    where possible.
 */
 
-function assortativePairs(
-    ids,
-    actionsPD,
-    rng
-) {
+function makeAssortativePairs(ids, model) {
 
-    const C = [];
-    const D = [];
+    const cooperators = [];
+    const defectors = [];
 
 
-    for (
-        const agent of ids
-    ) {
+    ids.forEach(id => {
 
-        if (
-            actionsPD[agent]
-            ===
-            0
-        ) {
+        if (model.agents[id].action === "C") {
 
-            C.push(agent);
+            cooperators.push(id);
 
         } else {
 
-            D.push(agent);
+            defectors.push(id);
         }
-    }
+    });
 
 
-    const cooperators =
-        shuffle(
-            C,
-            rng
-        );
-
-
-    const defectors =
-        shuffle(
-            D,
-            rng
-        );
-
+    const c = shuffle(cooperators);
+    const d = shuffle(defectors);
 
     const pairs = [];
-
     const leftovers = [];
 
 
-    let index = 0;
+    while (c.length >= 2) {
 
-
-    while (
-        index + 1 <
-        cooperators.length
-    ) {
-
-        pairs.push(
-            [
-                cooperators[index],
-                cooperators[index + 1]
-            ]
-        );
-
-        index += 2;
+        pairs.push([
+            c.shift(),
+            c.shift()
+        ]);
     }
 
 
-    if (
-        index <
-        cooperators.length
-    ) {
+    if (c.length === 1) {
 
         leftovers.push(
-            cooperators[index]
+            c.shift()
         );
     }
 
 
-    index = 0;
+    while (d.length >= 2) {
 
-
-    while (
-        index + 1 <
-        defectors.length
-    ) {
-
-        pairs.push(
-            [
-                defectors[index],
-                defectors[index + 1]
-            ]
-        );
-
-        index += 2;
+        pairs.push([
+            d.shift(),
+            d.shift()
+        ]);
     }
 
 
-    if (
-        index <
-        defectors.length
-    ) {
+    if (d.length === 1) {
 
         leftovers.push(
-            defectors[index]
+            d.shift()
         );
     }
 
 
-    const extra =
-        randomPairsFromIds(
-            leftovers,
-            rng
-        );
+    if (leftovers.length === 2) {
 
-
-    pairs.push(
-        ...extra
-    );
+        pairs.push([
+            leftovers[0],
+            leftovers[1]
+        ]);
+    }
 
 
     return pairs;
 }
 
 
-/* ============================================================
-   MEMORY
-============================================================ */
+/*
+    m determines whether the current rematching event
+    is assortative or random.
+*/
 
-function createMemory() {
+function rematch(ids, model) {
 
-    return Array.from(
-        {
-            length: N_AGENTS
-        },
-        () => []
-    );
-}
+    const assortative =
+        Math.random() < m;
 
 
-function storeExperience(
-    memory,
-    agent,
-    state,
-    action,
-    reward
-) {
+    const pairs =
+        assortative
 
-    memory[agent].push(
-        {
-            state,
-            action,
-            reward
-        }
-    );
-}
-
-
-/* ============================================================
-   Q UPDATE
-============================================================ */
-
-function updateQ(
-    Q,
-    memory
-) {
-
-    for (
-        let agent = 0;
-        agent <
-        N_AGENTS;
-        agent++
-    ) {
-
-        let running = 0;
-
-
-        const experiences =
-            memory[agent];
-
-
-        for (
-            let k =
-                experiences.length - 1;
-            k >= 0;
-            k--
-        ) {
-
-            const e =
-                experiences[k];
-
-
-            running =
-                e.reward
-                +
-                GAMMA
-                *
-                running;
-
-
-            const si =
-                stateToIndex(
-                    e.state
-                );
-
-
-            Q[agent][si][e.action]
-                =
-                (
-                    1 -
-                    ALPHA
-                )
-                *
-                Q[agent][si][e.action]
-                +
-                ALPHA
-                *
-                running;
-        }
-
-
-        memory[agent] = [];
-    }
-}
-
-
-/* ============================================================
-   MODEL
-============================================================ */
-
-class Model {
-
-    constructor(type) {
-
-        this.type =
-            type;
-
-        this.reset();
-    }
-
-
-    reset() {
-
-        this.rng =
-            seededRandom(
-                this.type === "baseline"
-                ?
-                1235
-                :
-                1235
-            );
-
-
-        this.Q =
-            createQTable();
-
-
-        this.memory =
-            createMemory();
-
-
-        /*
-            Match the model's binary
-            initial PD action state.
-        */
-
-        this.actionsPD =
-            Array.from(
-
-                {
-                    length:
-                        N_AGENTS
-                },
-
-                () =>
-                    this.rng() <
-                    0.5
-                    ?
-                    0
-                    :
-                    1
-
-            );
-
-
-        this.groups =
-            randomPairs(
-                this.rng
-            );
-
-
-        this.iteration =
-            0;
-
-
-        this.cooperation =
-            0;
-
-
-        this.positions =
-            Array.from(
-                {
-                    length:
-                        N_AGENTS
-                },
-                () => ({
-                    left: 50,
-                    top: 50
-                })
-            );
-
-
-        this.targets =
-            Array.from(
-                {
-                    length:
-                        N_AGENTS
-                },
-                () => ({
-                    left: 50,
-                    top: 50
-                })
-            );
-
-
-        assignTargets(this);
-    }
-
-
-    baselineRematch(m) {
-
-        const ids =
-            Array.from(
-                {
-                    length:
-                        N_AGENTS
-                },
-                (_, i) => i
-            );
-
-
-        if (
-            this.rng() <
-            m
-        ) {
-
-            this.groups =
-                assortativePairs(
-                    ids,
-                    this.actionsPD,
-                    this.rng
-                );
-
-        } else {
-
-            this.groups =
-                randomPairsFromIds(
-                    ids,
-                    this.rng
-                );
-        }
-    }
-
-
-    hybridRematch(m) {
-
-        const stayPairs = [];
-
-        const switchPool = [];
-
-
-        for (
-            const pair of
-            this.groups
-        ) {
-
-            const i =
-                pair[0];
-
-            const j =
-                pair[1];
-
-
-            const stateI =
-                this.actionsPD[j];
-
-            const stateJ =
-                this.actionsPD[i];
-
-
-            const actionI =
-                selectAction(
-                    this.Q,
-                    i,
-                    stateI,
-                    this.rng
-                );
-
-
-            const actionJ =
-                selectAction(
-                    this.Q,
-                    j,
-                    stateJ,
-                    this.rng
-                );
-
-
-            /*
-                Relationship decision
-                has zero immediate reward.
-            */
-
-            storeExperience(
-                this.memory,
-                i,
-                stateI,
-                actionI,
-                0
-            );
-
-
-            storeExperience(
-                this.memory,
-                j,
-                stateJ,
-                actionJ,
-                0
-            );
-
-
-            /*
-                Relationship remains only
-                when both choose stay.
-            */
-
-            if (
-                actionI === 0
-                &&
-                actionJ === 0
-            ) {
-
-                stayPairs.push(
-                    [
-                        i,
-                        j
-                    ]
-                );
-
-            } else {
-
-                switchPool.push(i);
-                switchPool.push(j);
-            }
-        }
-
-
-        let newPairs = [];
-
-
-        if (
-            switchPool.length >
-            0
-        ) {
-
-            if (
-                this.rng() <
-                m
-            ) {
-
-                newPairs =
-                    assortativePairs(
-                        switchPool,
-                        this.actionsPD,
-                        this.rng
-                    );
-
-            } else {
-
-                newPairs =
-                    randomPairsFromIds(
-                        switchPool,
-                        this.rng
-                    );
-            }
-        }
-
-
-        this.groups = [
-            ...stayPairs,
-            ...newPairs
-        ];
-    }
-
-
-    step(m) {
-
-        let CC = 0;
-        let CD = 0;
-        let DC = 0;
-        let DD = 0;
-
-
-        for (
-            let round = 0;
-            round < ROUNDS;
-            round++
-        ) {
-
-            if (
-                this.type
-                ===
-                "baseline"
-            ) {
-
-                this.baselineRematch(m);
-
-            } else {
-
-                this.hybridRematch(m);
-            }
-
-
-            for (
-                const pair of
-                this.groups
-            ) {
-
-                const i =
-                    pair[0];
-
-                const j =
-                    pair[1];
-
-
-                const previousI =
-                    this.actionsPD[i];
-
-                const previousJ =
-                    this.actionsPD[j];
-
-
-                const stateI =
-                    100
-                    +
-                    previousJ;
-
-
-                const stateJ =
-                    100
-                    +
-                    previousI;
-
-
-                const actionI =
-                    selectAction(
-                        this.Q,
-                        i,
-                        stateI,
-                        this.rng
-                    );
-
-
-                const actionJ =
-                    selectAction(
-                        this.Q,
-                        j,
-                        stateJ,
-                        this.rng
-                    );
-
-
-                const rewardI =
-                    REWARD_1
-                    [actionI]
-                    [actionJ];
-
-
-                const rewardJ =
-                    REWARD_2
-                    [actionI]
-                    [actionJ];
-
-
-                storeExperience(
-                    this.memory,
-                    i,
-                    stateI,
-                    actionI,
-                    rewardI
-                );
-
-
-                storeExperience(
-                    this.memory,
-                    j,
-                    stateJ,
-                    actionJ,
-                    rewardJ
-                );
-
-
-                if (
-                    actionI === 0
-                    &&
-                    actionJ === 0
-                ) {
-
-                    CC++;
-
-                }
-
-                else if (
-                    actionI === 0
-                    &&
-                    actionJ === 1
-                ) {
-
-                    CD++;
-
-                }
-
-                else if (
-                    actionI === 1
-                    &&
-                    actionJ === 0
-                ) {
-
-                    DC++;
-
-                }
-
-                else {
-
-                    DD++;
-                }
-
-
-                this.actionsPD[i] =
-                    actionI;
-
-                this.actionsPD[j] =
-                    actionJ;
-            }
-        }
-
-
-        updateQ(
-            this.Q,
-            this.memory
-        );
-
-
-        const outcomes =
-            CC
-            +
-            CD
-            +
-            DC
-            +
-            DD;
-
-
-        this.cooperation =
-            (
-                2 * CC
-                +
-                CD
-                +
-                DC
+            ? makeAssortativePairs(
+                ids,
+                model
             )
-            /
-            (
-                2 *
-                outcomes
-            );
+
+            : makeRandomPairs(ids);
 
 
-        this.iteration++;
-
-
-        assignTargets(
-            this
-        );
-    }
+    return {
+        pairs,
+        assortative
+    };
 }
 
 
-/* ============================================================
-   VISUAL POSITIONS
-============================================================ */
+/* =========================================================
+   PAIR POSITIONS
+========================================================= */
 
-const SLOTS = [
+const PAIR_POSITIONS = [
 
-    [25, 14],
-    [75, 14],
+    [24, 18],
+    [76, 18],
 
-    [25, 31],
-    [75, 31],
+    [24, 35],
+    [76, 35],
 
-    [25, 48],
-    [75, 48],
+    [24, 52],
+    [76, 52],
 
-    [25, 65],
-    [75, 65],
+    [24, 69],
+    [76, 69],
 
-    [25, 82],
-    [75, 82]
+    [24, 86],
+    [76, 86]
 
 ];
 
 
-function assignTargets(model) {
+function getPairTargets(pairs) {
 
-    model.groups.forEach(
-        (pair, index) => {
-
-            const slot =
-                SLOTS[index];
+    const positions = {};
 
 
-            if (!slot) {
-                return;
-            }
+    pairs.forEach((pair, index) => {
+
+        const slot =
+            PAIR_POSITIONS[index];
+
+        if (!slot) return;
 
 
-            model.targets[
-                pair[0]
-            ] = {
+        positions[pair[0]] = {
 
-                left:
-                    slot[0]
-                    -
-                    5.5,
+            x: slot[0] - 5,
 
-                top:
-                    slot[1]
-
-            };
+            y: slot[1]
+        };
 
 
-            model.targets[
-                pair[1]
-            ] = {
+        positions[pair[1]] = {
 
-                left:
-                    slot[0]
-                    +
-                    5.5,
+            x: slot[0] + 5,
 
-                top:
-                    slot[1]
+            y: slot[1]
+        };
+    });
 
-            };
-        }
-    );
+
+    return positions;
 }
 
 
-/* ============================================================
-   DOM CREATION
-============================================================ */
+/* =========================================================
+   REMATCHING POOL POSITIONS
+========================================================= */
 
-function createAgentElements(
-    model,
-    container,
-    type
-) {
+function getPoolPositions(ids) {
 
-    container.innerHTML =
-        "";
+    const positions = {};
+
+    const columns = 5;
+
+    const startX = 36;
+    const startY = 43;
+
+    const gapX = 7;
+    const gapY = 12;
 
 
-    for (
-        let i = 0;
-        i <
-        N_AGENTS;
-        i++
-    ) {
+    ids.forEach((id, index) => {
 
-        const agent =
+        const row =
+            Math.floor(
+                index / columns
+            );
+
+        const column =
+            index % columns;
+
+
+        positions[id] = {
+
+            x:
+                startX +
+                column * gapX,
+
+            y:
+                startY +
+                row * gapY
+        };
+    });
+
+
+    return positions;
+}
+
+
+/* =========================================================
+   CREATE HTML AGENTS
+========================================================= */
+
+function createAgentElements(model, containerId) {
+
+    const container =
+        document.getElementById(
+            containerId
+        );
+
+
+    container.innerHTML = "";
+
+
+    model.agents.forEach(agent => {
+
+        const element =
             document.createElement(
                 "div"
             );
 
 
-        agent.className =
-            `agent ${type}`;
+        element.className =
+            `agent ${model.type}`;
 
 
-        agent.dataset.agent =
-            i;
+        element.id =
+            `${model.type}-agent-${agent.id}`;
 
 
-        const action =
-            document.createElement(
-                "span"
-            );
+        element.innerHTML = `
+            <span class="agent-action">
+                ${agent.action}
+            </span>
 
-
-        action.className =
-            "agent-action";
-
-
-        const number =
-            document.createElement(
-                "span"
-            );
-
-
-        number.className =
-            "agent-number";
-
-
-        number.textContent =
-            i + 1;
-
-
-        agent.appendChild(
-            action
-        );
-
-
-        agent.appendChild(
-            number
-        );
+            <span class="agent-number">
+                ${agent.id + 1}
+            </span>
+        `;
 
 
         container.appendChild(
-            agent
+            element
         );
-    }
+    });
 }
 
 
-/* ============================================================
-   DRAW MODEL
-============================================================ */
+/* =========================================================
+   UPDATE AGENT APPEARANCE
+========================================================= */
 
-function drawModel(
-    model,
-    agentLayer,
-    lineLayer,
-    colour
-) {
+function updateAgentAppearance(model) {
 
-    const agents =
-        agentLayer.querySelectorAll(
-            ".agent"
+    model.agents.forEach(agent => {
+
+        const element =
+            document.getElementById(
+                `${model.type}-agent-${agent.id}`
+            );
+
+
+        if (!element) return;
+
+
+        element.classList.toggle(
+            "cooperate",
+            agent.action === "C"
         );
 
 
-    agents.forEach(
-        (element, index) => {
-
-            const target =
-                model.targets[index];
-
-
-            element.style.left =
-                target.left +
-                "%";
+        element.classList.toggle(
+            "defect",
+            agent.action === "D"
+        );
 
 
-            element.style.top =
-                target.top +
-                "%";
+        element.classList.toggle(
+            "in-pool",
+            agent.inPool
+        );
 
 
-            const cooperation =
-                model.actionsPD[index]
-                ===
-                0;
+        element.classList.toggle(
+            "retained",
+            agent.retained
+        );
 
 
-            element.classList.toggle(
-                "cooperate",
-                cooperation
+        element
+            .querySelector(
+                ".agent-action"
+            )
+            .textContent =
+                agent.action;
+    });
+}
+
+
+/* =========================================================
+   MOVE AGENTS
+========================================================= */
+
+function moveToPairs(model) {
+
+    const positions =
+        getPairTargets(
+            model.pairs
+        );
+
+
+    model.agents.forEach(agent => {
+
+        const element =
+            document.getElementById(
+                `${model.type}-agent-${agent.id}`
             );
 
 
-            element.classList.toggle(
-                "defect",
-                !cooperation
+        const position =
+            positions[agent.id];
+
+
+        if (!position) return;
+
+
+        element.style.left =
+            `${position.x}%`;
+
+
+        element.style.top =
+            `${position.y}%`;
+    });
+}
+
+
+function moveAgentsToPool(
+    model,
+    ids
+) {
+
+    const positions =
+        getPoolPositions(ids);
+
+
+    ids.forEach(id => {
+
+        const element =
+            document.getElementById(
+                `${model.type}-agent-${id}`
             );
 
 
-            element
-                .querySelector(
-                    ".agent-action"
-                )
-                .textContent =
-                    cooperation
-                    ?
-                    "C"
-                    :
-                    "D";
-        }
-    );
+        const position =
+            positions[id];
 
 
-    lineLayer.innerHTML =
-        "";
+        element.style.left =
+            `${position.x}%`;
+
+
+        element.style.top =
+            `${position.y}%`;
+    });
+}
+
+
+/* =========================================================
+   DRAW PARTNERSHIP LINES
+========================================================= */
+
+function drawLines(
+    model,
+    svgId,
+    colour,
+    onlyPairs = null
+) {
+
+    const svg =
+        document.getElementById(
+            svgId
+        );
+
+
+    svg.innerHTML = "";
 
 
     const rect =
-        lineLayer
-            .getBoundingClientRect();
+        svg.getBoundingClientRect();
 
 
-    lineLayer.setAttribute(
+    if (
+        rect.width === 0 ||
+        rect.height === 0
+    ) {
+        return;
+    }
+
+
+    svg.setAttribute(
         "viewBox",
         `0 0 ${rect.width} ${rect.height}`
     );
 
 
-    for (
-        const pair of
-        model.groups
-    ) {
-
-        const a =
-            model.targets[
-                pair[0]
-            ];
+    const positions =
+        getPairTargets(
+            model.pairs
+        );
 
 
-        const b =
-            model.targets[
-                pair[1]
-            ];
+    const pairs =
+        onlyPairs || model.pairs;
+
+
+    pairs.forEach(pair => {
+
+        const p1 =
+            positions[pair[0]];
+
+        const p2 =
+            positions[pair[1]];
+
+
+        if (!p1 || !p2) {
+            return;
+        }
 
 
         const line =
@@ -1284,33 +590,25 @@ function drawModel(
 
         line.setAttribute(
             "x1",
-            rect.width *
-            a.left /
-            100
+            p1.x / 100 * rect.width
         );
 
 
         line.setAttribute(
             "y1",
-            rect.height *
-            a.top /
-            100
+            p1.y / 100 * rect.height
         );
 
 
         line.setAttribute(
             "x2",
-            rect.width *
-            b.left /
-            100
+            p2.x / 100 * rect.width
         );
 
 
         line.setAttribute(
             "y2",
-            rect.height *
-            b.top /
-            100
+            p2.y / 100 * rect.height
         );
 
 
@@ -1327,575 +625,1284 @@ function drawModel(
 
 
         line.setAttribute(
+            "stroke-linecap",
+            "round"
+        );
+
+
+        line.setAttribute(
             "stroke-opacity",
             "0.55"
         );
 
 
-        lineLayer.appendChild(
-            line
+        svg.appendChild(line);
+    });
+}
+
+
+/* =========================================================
+   FLOW HIGHLIGHT
+========================================================= */
+
+function clearFlow() {
+
+    document
+        .querySelectorAll(
+            ".flow-item"
+        )
+        .forEach(item => {
+
+            item.classList.remove(
+                "active"
+            );
+        });
+}
+
+
+function activateFlow(id) {
+
+    clearFlow();
+
+
+    const element =
+        document.getElementById(id);
+
+
+    if (element) {
+
+        element.classList.add(
+            "active"
         );
     }
 }
 
 
-/* ============================================================
-   MODELS + ELEMENTS
-============================================================ */
+/* =========================================================
+   STAGE INDICATOR
+========================================================= */
 
-const baseline =
-    new Model(
-        "baseline"
-    );
+function setStage(
+    text,
+    dot
+) {
 
-
-const hybrid =
-    new Model(
-        "hybrid"
-    );
-
-
-const baselineAgents =
     document.getElementById(
-        "baselineAgents"
-    );
+        "stageText"
+    ).textContent = text;
 
 
-const hybridAgents =
-    document.getElementById(
-        "hybridAgents"
-    );
+    document
+        .querySelectorAll(
+            ".stage-dot"
+        )
+        .forEach(element => {
+
+            element.classList.remove(
+                "active"
+            );
+        });
 
 
-const baselineLines =
-    document.getElementById(
-        "baselineLines"
-    );
+    if (dot) {
 
-
-const hybridLines =
-    document.getElementById(
-        "hybridLines"
-    );
-
-
-createAgentElements(
-    baseline,
-    baselineAgents,
-    "baseline"
-);
-
-
-createAgentElements(
-    hybrid,
-    hybridAgents,
-    "hybrid"
-);
-
-
-/* ============================================================
-   SELECTED M
-============================================================ */
-
-let selectedM = 0.0;
-
-
-/* ============================================================
-   REPORTED RESULTS
-============================================================ */
-
-function resultKey(m) {
-
-    return Number(m)
-        .toFixed(1);
+        document
+            .getElementById(dot)
+            .classList.add(
+                "active"
+            );
+    }
 }
 
 
-function updateReportedResults() {
+/* =========================================================
+   MESSAGE HELPERS
+========================================================= */
 
-    const key =
-        resultKey(
-            selectedM
+function baselineMessage(text) {
+
+    document.getElementById(
+        "baselineMessage"
+    ).textContent = text;
+}
+
+
+function hybridMessage(text) {
+
+    document.getElementById(
+        "hybridMessage"
+    ).textContent = text;
+}
+
+
+function baselineExplanation(text) {
+
+    document.getElementById(
+        "baselineExplanation"
+    ).textContent = text;
+}
+
+
+function hybridExplanation(text) {
+
+    document.getElementById(
+        "hybridExplanation"
+    ).textContent = text;
+}
+
+
+/* =========================================================
+   POOL VISIBILITY
+========================================================= */
+
+function showPool(type, visible) {
+
+    document
+        .getElementById(
+            `${type}Pool`
+        )
+        .classList.toggle(
+            "visible",
+            visible
+        );
+}
+
+
+/* =========================================================
+   HYBRID DECISION BADGES
+========================================================= */
+
+function clearDecisionBadges() {
+
+    document
+        .querySelectorAll(
+            ".decision-badge"
+        )
+        .forEach(element => {
+
+            element.remove();
+        });
+}
+
+
+function addDecisionBadge(
+    type,
+    x,
+    y,
+    text,
+    badgeClass
+) {
+
+    const wrapper =
+        document.querySelector(
+            `.${type}-side .simulation-wrapper`
         );
 
 
-    const values =
-        DISSERTATION_RESULTS[
-            key
-        ];
+    const badge =
+        document.createElement(
+            "div"
+        );
 
 
-    document
-        .getElementById(
-            "baselineReported"
-        )
-        .textContent =
-            formatPercent(
-                values.baseline
-            );
+    badge.className =
+        `decision-badge ${badgeClass}`;
 
 
-    document
-        .getElementById(
-            "hybridReported"
-        )
-        .textContent =
-            formatPercent(
-                values.hybrid
-            );
+    badge.style.left =
+        `${x}%`;
 
 
-    document
-        .getElementById(
-            "baselineResult"
-        )
-        .textContent =
-            formatPercent(
-                values.baseline
-            );
+    badge.style.top =
+        `${y}%`;
 
 
-    document
-        .getElementById(
-            "hybridResult"
-        )
-        .textContent =
-            formatPercent(
-                values.hybrid
-            );
+    badge.textContent =
+        text;
 
 
-    document
-        .getElementById(
-            "resultM"
-        )
-        .textContent =
-            key;
-
-
-    document
-        .getElementById(
-            "baselineBar"
-        )
-        .style.width =
-            (
-                values.baseline *
-                100
-            )
-            +
-            "%";
-
-
-    document
-        .getElementById(
-            "hybridBar"
-        )
-        .style.width =
-            (
-                values.hybrid *
-                100
-            )
-            +
-            "%";
-}
-
-
-/* ============================================================
-   METRICS
-============================================================ */
-
-function updateMetrics() {
-
-    document
-        .getElementById(
-            "baselineIteration"
-        )
-        .textContent =
-            baseline.iteration
-                .toLocaleString();
-
-
-    document
-        .getElementById(
-            "hybridIteration"
-        )
-        .textContent =
-            hybrid.iteration
-                .toLocaleString();
-
-
-    document
-        .getElementById(
-            "baselineLive"
-        )
-        .textContent =
-            baseline.iteration
-            ===
-            0
-            ?
-            "—"
-            :
-            formatPercent(
-                baseline.cooperation
-            );
-
-
-    document
-        .getElementById(
-            "hybridLive"
-        )
-        .textContent =
-            hybrid.iteration
-            ===
-            0
-            ?
-            "—"
-            :
-            formatPercent(
-                hybrid.cooperation
-            );
-}
-
-
-/* ============================================================
-   RENDER
-============================================================ */
-
-function render() {
-
-    drawModel(
-        baseline,
-        baselineAgents,
-        baselineLines,
-        "#c06082"
+    wrapper.appendChild(
+        badge
     );
-
-
-    drawModel(
-        hybrid,
-        hybridAgents,
-        hybridLines,
-        "#7b6fd6"
-    );
-
-
-    updateMetrics();
 }
 
 
-/* ============================================================
-   M BUTTONS
-============================================================ */
+/* =========================================================
+   SIMULATED PD ACTIONS
+========================================================= */
 
-document
-    .querySelectorAll(
-        ".m-button"
-    )
-    .forEach(
-        button => {
+function updateActions(model) {
 
-            button.addEventListener(
-                "click",
-                () => {
+    /*
+        This website demonstrates the interaction mechanism.
 
-                    selectedM =
-                        Number(
-                            button.dataset.m
-                        );
+        C/D outcomes change between cycles so the user can
+        see how behavioural assortativity affects rematching.
+    */
+
+    model.agents.forEach(agent => {
+
+        const current =
+            agent.action;
 
 
-                    document
-                        .querySelectorAll(
-                            ".m-button"
-                        )
-                        .forEach(
-                            b =>
-                                b.classList
-                                    .remove(
-                                        "active"
-                                    )
-                        );
+        if (current === "C") {
+
+            agent.action =
+                Math.random() < 0.78
+                    ? "C"
+                    : "D";
+
+        } else {
+
+            agent.action =
+                Math.random() < 0.42
+                    ? "C"
+                    : "D";
+        }
+    });
 
 
-                    button
-                        .classList
-                        .add(
-                            "active"
-                        );
+    updateAgentAppearance(
+        model
+    );
+}
 
 
-                    updateReportedResults();
+/* =========================================================
+   HYBRID STAY / SWITCH
+========================================================= */
+
+function chooseHybridDecisions() {
+
+    const retainedPairs = [];
+    const switchingIds = [];
 
 
-                    resetSimulation();
-                }
+    hybrid.agents.forEach(agent => {
+
+        agent.retained = false;
+        agent.inPool = false;
+        agent.decision = null;
+    });
+
+
+    hybrid.pairs.forEach((pair, index) => {
+
+        const a =
+            hybrid.agents[
+                pair[0]
+            ];
+
+
+        const b =
+            hybrid.agents[
+                pair[1]
+            ];
+
+
+        /*
+            Visual representation of the learned decision.
+
+            Cooperative partnerships are more likely to
+            demonstrate retention; partnerships containing
+            defection are more likely to demonstrate switching.
+        */
+
+        const aStayProbability =
+            b.action === "C"
+                ? 0.86
+                : 0.28;
+
+
+        const bStayProbability =
+            a.action === "C"
+                ? 0.86
+                : 0.28;
+
+
+        a.decision =
+            Math.random() <
+            aStayProbability
+                ? "STAY"
+                : "SWITCH";
+
+
+        b.decision =
+            Math.random() <
+            bStayProbability
+                ? "STAY"
+                : "SWITCH";
+
+
+        const retained =
+            a.decision === "STAY" &&
+            b.decision === "STAY";
+
+
+        const slot =
+            PAIR_POSITIONS[index];
+
+
+        if (retained) {
+
+            a.retained = true;
+            b.retained = true;
+
+
+            retainedPairs.push(
+                pair
+            );
+
+
+            addDecisionBadge(
+                "hybrid",
+                slot[0],
+                slot[1] - 7,
+                "BOTH STAY",
+                "stay-badge"
+            );
+
+        } else {
+
+            a.inPool = true;
+            b.inPool = true;
+
+
+            switchingIds.push(
+                a.id,
+                b.id
+            );
+
+
+            addDecisionBadge(
+                "hybrid",
+                slot[0],
+                slot[1] - 7,
+                "SWITCH",
+                "switch-badge"
             );
         }
+    });
+
+
+    return {
+
+        retainedPairs,
+
+        switchingIds
+    };
+}
+
+
+/* =========================================================
+   CYCLE DATA
+========================================================= */
+
+let hybridDecisionData = null;
+
+
+/* =========================================================
+   STAGE 1 — PLAY
+========================================================= */
+
+function stageInteraction() {
+
+    if (!running || paused) return;
+
+
+    stage = 1;
+
+
+    clearDecisionBadges();
+
+    showPool(
+        "baseline",
+        false
+    );
+
+    showPool(
+        "hybrid",
+        false
     );
 
 
-/* ============================================================
-   SIMULATION LOOP
-============================================================ */
+    baseline.agents.forEach(agent => {
 
-let running =
-    false;
-
-
-let timer =
-    null;
+        agent.inPool = false;
+        agent.retained = false;
+    });
 
 
-const speedSlider =
-    document.getElementById(
-        "speedSlider"
+    hybrid.agents.forEach(agent => {
+
+        agent.inPool = false;
+        agent.retained = false;
+    });
+
+
+    updateActions(
+        baseline
+    );
+
+    updateActions(
+        hybrid
     );
 
 
-const speedValue =
-    document.getElementById(
-        "speedValue"
+    updateAgentAppearance(
+        baseline
+    );
+
+    updateAgentAppearance(
+        hybrid
     );
 
 
-function tick() {
+    moveToPairs(
+        baseline
+    );
 
-    if (!running) {
-        return;
-    }
+    moveToPairs(
+        hybrid
+    );
 
 
-    const speed =
-        Number(
-            speedSlider.value
+    drawLines(
+        baseline,
+        "baselineLines",
+        BASELINE_COLOUR
+    );
+
+
+    drawLines(
+        hybrid,
+        "hybridLines",
+        HYBRID_COLOUR
+    );
+
+
+    setStage(
+        "1 · Agents interact with their current partners",
+        "dotInteraction"
+    );
+
+
+    activateFlow(
+        "baselineFlowPlay"
+    );
+
+
+    document
+        .getElementById(
+            "hybridFlowPlay"
+        )
+        .classList.add(
+            "active"
+        );
+
+
+    baselineMessage(
+        "Agents play with their current partners"
+    );
+
+
+    hybridMessage(
+        "Agents play with their current partners"
+    );
+
+
+    baselineExplanation(
+        "Each agent's most recent Prisoner's Dilemma action is represented as C or D."
+    );
+
+
+    hybridExplanation(
+        "The Hybrid observes the interaction before making its learned relationship decision."
+    );
+
+
+    wait(
+        stageDecision,
+        2200
+    );
+}
+
+
+/* =========================================================
+   STAGE 2 — PARTNER DECISION
+========================================================= */
+
+function stageDecision() {
+
+    if (!running || paused) return;
+
+
+    stage = 2;
+
+
+    setStage(
+        "2 · Determine which partnerships continue",
+        "dotDecision"
+    );
+
+
+    activateFlow(
+        "baselineFlowDecision"
+    );
+
+
+    document
+        .getElementById(
+            "hybridFlowDecision"
+        )
+        .classList.add(
+            "active"
         );
 
 
     /*
-        Multiple actual model iterations
-        per visual update.
+        BASELINE:
+        everyone enters rematching.
     */
 
-    const steps =
-        Math.max(
-            1,
-            speed
+    baseline.agents.forEach(agent => {
+
+        agent.inPool = true;
+    });
+
+
+    updateAgentAppearance(
+        baseline
+    );
+
+
+    baselineMessage(
+        "All partnerships enter rematching"
+    );
+
+
+    baselineExplanation(
+        "The Baseline has no learned selective partner-retention policy. All agents proceed to the rematching stage."
+    );
+
+
+    /*
+        HYBRID:
+        decide stay/switch.
+    */
+
+    hybridDecisionData =
+        chooseHybridDecisions();
+
+
+    updateAgentAppearance(
+        hybrid
+    );
+
+
+    drawLines(
+        hybrid,
+        "hybridLines",
+        HYBRID_COLOUR,
+        hybridDecisionData
+            .retainedPairs
+    );
+
+
+    hybridMessage(
+        "Each pair makes learned stay / switch decisions"
+    );
+
+
+    hybridExplanation(
+        "A partnership is retained only when both agents choose STAY. If either chooses SWITCH, both enter the rematching pool."
+    );
+
+
+    /*
+        Baseline lines disappear because
+        every partnership is dissolved.
+    */
+
+    document.getElementById(
+        "baselineLines"
+    ).innerHTML = "";
+
+
+    wait(
+        stagePool,
+        2600
+    );
+}
+
+
+/* =========================================================
+   STAGE 3 — REMATCHING POOL
+========================================================= */
+
+function stagePool() {
+
+    if (!running || paused) return;
+
+
+    stage = 3;
+
+
+    clearDecisionBadges();
+
+
+    setStage(
+        "3 · Rematching",
+        "dotRematch"
+    );
+
+
+    activateFlow(
+        "baselineFlowMatch"
+    );
+
+
+    document
+        .getElementById(
+            "hybridFlowMatch"
+        )
+        .classList.add(
+            "active"
         );
 
 
-    for (
-        let i = 0;
-        i < steps;
-        i++
-    ) {
+    /*
+        BASELINE POOL
+    */
 
-        baseline.step(
-            selectedM
+    const allBaselineIds =
+        baseline.agents.map(
+            agent => agent.id
         );
 
 
-        hybrid.step(
-            selectedM
+    showPool(
+        "baseline",
+        true
+    );
+
+
+    moveAgentsToPool(
+        baseline,
+        allBaselineIds
+    );
+
+
+    /*
+        HYBRID POOL
+    */
+
+    const switchingIds =
+        hybridDecisionData
+            .switchingIds;
+
+
+    if (switchingIds.length > 0) {
+
+        showPool(
+            "hybrid",
+            true
+        );
+
+
+        moveAgentsToPool(
+            hybrid,
+            switchingIds
+        );
+
+    } else {
+
+        showPool(
+            "hybrid",
+            false
         );
     }
 
 
-    render();
-
-
-    timer =
-        window.setTimeout(
-            tick,
-            Math.max(
-                80,
-                600
-                -
-                speed * 48
-            )
+    const baselineMatch =
+        rematch(
+            allBaselineIds,
+            baseline
         );
+
+
+    const hybridMatch =
+        rematch(
+            switchingIds,
+            hybrid
+        );
+
+
+    hybridDecisionData
+        .baselineNewPairs =
+            baselineMatch.pairs;
+
+
+    hybridDecisionData
+        .hybridNewPairs =
+            hybridMatch.pairs;
+
+
+    hybridDecisionData
+        .baselineAssortative =
+            baselineMatch.assortative;
+
+
+    hybridDecisionData
+        .hybridAssortative =
+            hybridMatch.assortative;
+
+
+    baselineMessage(
+
+        baselineMatch.assortative
+
+            ? `m = ${m.toFixed(2)} → assortative rematching`
+
+            : `m = ${m.toFixed(2)} → random rematching`
+    );
+
+
+    hybridMessage(
+
+        switchingIds.length === 0
+
+            ? "No partnerships require rematching"
+
+            : hybridMatch.assortative
+
+                ? `m = ${m.toFixed(2)} → switchers assortatively rematched`
+
+                : `m = ${m.toFixed(2)} → switchers randomly rematched`
+    );
+
+
+    baselineExplanation(
+
+        baselineMatch.assortative
+
+            ? "This rematching event is assortative: agents are paired with others showing the same previous C/D behaviour where possible."
+
+            : "This rematching event is random: partners are assigned without using previous C/D behaviour."
+    );
+
+
+    hybridExplanation(
+
+        switchingIds.length === 0
+
+            ? "Every current Hybrid partnership was retained, so no agents enter rematching in this cycle."
+
+            : hybridMatch.assortative
+
+                ? "Only agents from dissolved relationships are in the pool. This event uses assortative rematching by previous C/D behaviour."
+
+                : "Only agents from dissolved relationships are in the pool. This event uses random rematching."
+    );
+
+
+    wait(
+        stageNewPartners,
+        2700
+    );
 }
 
 
-/* ============================================================
-   BUTTONS
-============================================================ */
+/* =========================================================
+   STAGE 4 — NEW PARTNERS
+========================================================= */
 
-const runButton =
+function stageNewPartners() {
+
+    if (!running || paused) return;
+
+
+    stage = 4;
+
+
+    setStage(
+        "4 · New partnerships formed",
+        "dotNewPairs"
+    );
+
+
+    activateFlow(
+        "baselineFlowNew"
+    );
+
+
+    document
+        .getElementById(
+            "hybridFlowNew"
+        )
+        .classList.add(
+            "active"
+        );
+
+
+    /*
+        BASELINE:
+        replace all pairs.
+    */
+
+    baseline.oldPairs =
+        baseline.pairs;
+
+
+    baseline.pairs =
+        hybridDecisionData
+            .baselineNewPairs;
+
+
+    baseline.agents.forEach(agent => {
+
+        agent.inPool = false;
+    });
+
+
+    /*
+        HYBRID:
+        retained pairs + newly rematched switchers.
+    */
+
+    hybrid.oldPairs =
+        hybrid.pairs;
+
+
+    hybrid.pairs = [
+
+        ...hybridDecisionData
+            .retainedPairs,
+
+        ...hybridDecisionData
+            .hybridNewPairs
+    ];
+
+
+    hybrid.agents.forEach(agent => {
+
+        agent.inPool = false;
+    });
+
+
+    showPool(
+        "baseline",
+        false
+    );
+
+
+    showPool(
+        "hybrid",
+        false
+    );
+
+
+    updateAgentAppearance(
+        baseline
+    );
+
+
+    updateAgentAppearance(
+        hybrid
+    );
+
+
+    moveToPairs(
+        baseline
+    );
+
+
+    moveToPairs(
+        hybrid
+    );
+
+
+    /*
+        Wait slightly before drawing new lines so
+        movement is visible.
+    */
+
+    setTimeout(() => {
+
+        drawLines(
+            baseline,
+            "baselineLines",
+            BASELINE_COLOUR
+        );
+
+
+        drawLines(
+            hybrid,
+            "hybridLines",
+            HYBRID_COLOUR
+        );
+
+    }, 650);
+
+
+    baselineMessage(
+        "New Baseline partnerships formed"
+    );
+
+
+    hybridMessage(
+        "Retained + newly rematched partnerships"
+    );
+
+
+    baselineExplanation(
+        "The entire Baseline population now begins the next interaction with its newly assigned partners."
+    );
+
+
+    hybridExplanation(
+        "Retained relationships persist, while only dissolved relationships have been replaced by new partners."
+    );
+
+
+    wait(
+        stageInteraction,
+        3000
+    );
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+function resetSimulation() {
+
+    clearTimeout(timer);
+
+    running = false;
+    paused = false;
+    stage = 0;
+
+
+    baseline =
+        createModel(
+            "baseline"
+        );
+
+
+    hybrid =
+        createModel(
+            "hybrid"
+        );
+
+
+    clearDecisionBadges();
+
+
+    showPool(
+        "baseline",
+        false
+    );
+
+
+    showPool(
+        "hybrid",
+        false
+    );
+
+
+    createAgentElements(
+        baseline,
+        "baselineAgents"
+    );
+
+
+    createAgentElements(
+        hybrid,
+        "hybridAgents"
+    );
+
+
+    updateAgentAppearance(
+        baseline
+    );
+
+
+    updateAgentAppearance(
+        hybrid
+    );
+
+
+    moveToPairs(
+        baseline
+    );
+
+
+    moveToPairs(
+        hybrid
+    );
+
+
+    setTimeout(() => {
+
+        drawLines(
+            baseline,
+            "baselineLines",
+            BASELINE_COLOUR
+        );
+
+
+        drawLines(
+            hybrid,
+            "hybridLines",
+            HYBRID_COLOUR
+        );
+
+    }, 100);
+
+
+    clearFlow();
+
+
+    setStage(
+        "Ready",
+        null
+    );
+
+
+    baselineMessage(
+        "Press Run to begin"
+    );
+
+
+    hybridMessage(
+        "Press Run to begin"
+    );
+
+
+    baselineExplanation(
+        "Agents begin in pairs. In the Baseline, partnerships are not selectively retained: the population proceeds to rematching."
+    );
+
+
+    hybridExplanation(
+        "Hybrid agents can retain their current relationship. A partnership survives only when both agents choose to stay."
+    );
+
+
     document.getElementById(
         "runButton"
-    );
+    ).disabled = false;
 
 
-const pauseButton =
     document.getElementById(
         "pauseButton"
-    );
+    ).disabled = true;
 
 
-const resetButton =
     document.getElementById(
-        "resetButton"
-    );
+        "pauseButton"
+    ).textContent = "Pause";
+}
 
 
-const status =
-    document.getElementById(
-        "status"
-    );
+/* =========================================================
+   RUN
+========================================================= */
 
-
-runButton.addEventListener(
+document.getElementById(
+    "runButton"
+).addEventListener(
     "click",
     () => {
 
-        if (running) {
+        if (running && !paused) {
             return;
         }
 
 
-        running =
-            true;
+        if (paused) {
+
+            paused = false;
+
+            document.getElementById(
+                "pauseButton"
+            ).textContent = "Pause";
 
 
-        runButton.disabled =
-            true;
+            if (stage === 1) {
 
+                stageDecision();
 
-        pauseButton.disabled =
-            false;
+            } else if (stage === 2) {
 
+                stagePool();
 
-        status.textContent =
-            "Running";
+            } else if (stage === 3) {
 
+                stageNewPartners();
 
-        status.classList.add(
-            "running"
-        );
+            } else {
 
+                stageInteraction();
+            }
 
-        tick();
-    }
-);
-
-
-pauseButton.addEventListener(
-    "click",
-    () => {
-
-        running =
-            false;
-
-
-        if (
-            timer !== null
-        ) {
-
-            clearTimeout(
-                timer
-            );
-
-
-            timer =
-                null;
+            return;
         }
 
 
-        runButton.disabled =
-            false;
+        running = true;
 
 
-        pauseButton.disabled =
-            true;
+        document.getElementById(
+            "runButton"
+        ).disabled = true;
 
 
-        status.textContent =
-            "Paused";
+        document.getElementById(
+            "pauseButton"
+        ).disabled = false;
 
 
-        status.classList.remove(
-            "running"
-        );
+        stageInteraction();
     }
 );
 
 
-function resetSimulation() {
+/* =========================================================
+   PAUSE
+========================================================= */
 
-    running =
-        false;
+document.getElementById(
+    "pauseButton"
+).addEventListener(
+    "click",
+    () => {
+
+        if (!running) {
+            return;
+        }
 
 
-    if (
-        timer !== null
-    ) {
+        if (!paused) {
 
-        clearTimeout(
-            timer
-        );
+            paused = true;
+
+            clearTimeout(timer);
 
 
-        timer =
-            null;
+            document.getElementById(
+                "pauseButton"
+            ).textContent = "Resume";
+
+
+            document.getElementById(
+                "runButton"
+            ).disabled = true;
+
+        } else {
+
+            paused = false;
+
+
+            document.getElementById(
+                "pauseButton"
+            ).textContent = "Pause";
+
+
+            if (stage === 1) {
+
+                stageDecision();
+
+            } else if (stage === 2) {
+
+                stagePool();
+
+            } else if (stage === 3) {
+
+                stageNewPartners();
+
+            } else {
+
+                stageInteraction();
+            }
+        }
     }
+);
 
 
-    baseline.reset();
+/* =========================================================
+   RESET BUTTON
+========================================================= */
 
-    hybrid.reset();
-
-
-    runButton.disabled =
-        false;
-
-
-    pauseButton.disabled =
-        true;
-
-
-    status.textContent =
-        "Ready";
-
-
-    status.classList.remove(
-        "running"
-    );
-
-
-    render();
-}
-
-
-resetButton.addEventListener(
+document.getElementById(
+    "resetButton"
+).addEventListener(
     "click",
     resetSimulation
 );
 
 
-/* ============================================================
-   SPEED
-============================================================ */
+/* =========================================================
+   m SLIDER
+========================================================= */
 
-speedSlider.addEventListener(
+const mSlider =
+    document.getElementById(
+        "mSlider"
+    );
+
+
+const mValue =
+    document.getElementById(
+        "mValue"
+    );
+
+
+mSlider.addEventListener(
     "input",
     () => {
 
-        speedValue.textContent =
-            speedSlider.value
-            +
-            "×";
+        m =
+            Number(
+                mSlider.value
+            );
+
+
+        mValue.textContent =
+            m.toFixed(2);
     }
 );
 
 
-/* ============================================================
-   START
-============================================================ */
+/* =========================================================
+   WINDOW RESIZE
+========================================================= */
 
-updateReportedResults();
+window.addEventListener(
+    "resize",
+    () => {
 
-render();
+        drawLines(
+            baseline,
+            "baselineLines",
+            BASELINE_COLOUR
+        );
 
-console.log(
-    "Dissertation simulation loaded."
+
+        drawLines(
+            hybrid,
+            "hybridLines",
+            HYBRID_COLOUR
+        );
+    }
 );
+
+
+/* =========================================================
+   INITIALISE
+========================================================= */
+
+resetSimulation();
