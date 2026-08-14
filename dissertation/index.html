@@ -4,77 +4,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Assortative Matching & Cooperation</title>
+    <title>Assortative Matching and Cooperation</title>
 
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<header class="hero">
-    <div class="hero-inner">
+<header class="site-header">
 
-        <div class="eyebrow">
+    <div class="header-inner">
+
+        <p class="eyebrow">
             MSc Computer Science Dissertation · University of Warwick
-        </div>
+        </p>
 
         <h1>
             Assortative Matching and the Emergence of Cooperation
         </h1>
 
-        <p class="subtitle">
-            An interactive demonstration of the
+        <p class="intro">
+            Interactive simulation of the two reinforcement-learning models
+            studied in the dissertation:
             <span class="baseline-text">Baseline</span>
             and
-            <span class="hybrid-text">Hybrid</span>
-            multi-agent reinforcement-learning models.
-        </p>
-
-        <p class="description">
-            Both simulations contain 20 reinforcement-learning agents playing a
-            repeated Prisoner&rsquo;s Dilemma. The Baseline repeatedly reforms
-            partnerships using random or assortative rematching. The Hybrid
-            additionally learns whether existing partnerships should be retained
-            or dissolved.
+            <span class="hybrid-text">Hybrid</span>.
         </p>
 
     </div>
+
 </header>
 
 
 <main>
 
-    <!-- =======================================================
-         GLOBAL CONTROLS
-    ======================================================== -->
+    <!-- =====================================================
+         CONTROLS
+    ====================================================== -->
 
-    <section class="controls-section">
+    <section class="controls">
 
-        <div class="section-heading">
+        <div class="controls-top">
+
             <div>
-                <span class="section-number">SIMULATION CONTROLS</span>
-                <h2>Run both models under matched conditions</h2>
+                <p class="small-heading">SIMULATION</p>
+                <h2>Matched experimental conditions</h2>
             </div>
 
-            <div class="status-pill" id="simulationStatus">
+            <div id="status" class="status">
                 Ready
             </div>
+
         </div>
 
 
-        <div class="controls-grid">
+        <div class="control-grid">
 
-            <div class="control-card">
+            <!-- m -->
 
-                <div class="control-header">
-                    <label for="mSlider">
-                        Assortativity
-                        <span class="math">m</span>
-                    </label>
+            <div class="control">
 
-                    <span class="control-value" id="mValue">
-                        0.00
-                    </span>
+                <div class="control-title">
+                    <span>Assortativity \(m\)</span>
+                    <strong id="mValue">0.00</strong>
                 </div>
 
                 <input
@@ -87,28 +79,24 @@
                 >
 
                 <div class="range-labels">
-                    <span>0 · Random</span>
-                    <span>1 · Fully assortative</span>
+                    <span>Random</span>
+                    <span>Fully assortative</span>
                 </div>
 
             </div>
 
 
-            <div class="control-card">
+            <!-- alpha -->
 
-                <div class="control-header">
-                    <label for="lrSlider">
-                        Learning rate
-                        <span class="math">&alpha;</span>
-                    </label>
+            <div class="control">
 
-                    <span class="control-value" id="lrValue">
-                        0.05
-                    </span>
+                <div class="control-title">
+                    <span>Learning rate α</span>
+                    <strong id="alphaValue">0.05</strong>
                 </div>
 
                 <input
-                    id="lrSlider"
+                    id="alphaSlider"
                     type="range"
                     min="0.01"
                     max="0.20"
@@ -124,17 +112,13 @@
             </div>
 
 
-            <div class="control-card">
+            <!-- tau -->
 
-                <div class="control-header">
-                    <label for="tauSlider">
-                        Exploration
-                        <span class="math">&tau;</span>
-                    </label>
+            <div class="control">
 
-                    <span class="control-value" id="tauValue">
-                        1.00
-                    </span>
+                <div class="control-title">
+                    <span>Exploration τ</span>
+                    <strong id="tauValue">1.00</strong>
                 </div>
 
                 <input
@@ -143,7 +127,7 @@
                     min="0.10"
                     max="1.00"
                     step="0.05"
-                    value="1.00"
+                    value="1"
                 >
 
                 <div class="range-labels">
@@ -154,23 +138,20 @@
             </div>
 
 
-            <div class="control-card">
+            <!-- speed -->
 
-                <div class="control-header">
-                    <label for="speedSlider">
-                        Simulation speed
-                    </label>
+            <div class="control">
 
-                    <span class="control-value" id="speedValue">
-                        1×
-                    </span>
+                <div class="control-title">
+                    <span>Speed</span>
+                    <strong id="speedValue">1×</strong>
                 </div>
 
                 <input
                     id="speedSlider"
                     type="range"
                     min="1"
-                    max="20"
+                    max="25"
                     step="1"
                     value="1"
                 >
@@ -185,10 +166,10 @@
         </div>
 
 
-        <div class="button-row">
+        <div class="buttons">
 
-            <button id="startButton" class="primary-button">
-                Run simulation
+            <button id="runButton" class="run-button">
+                ▶ Run
             </button>
 
             <button id="pauseButton" class="secondary-button" disabled>
@@ -202,249 +183,16 @@
         </div>
 
 
-        <div class="fixed-settings">
-            <span><strong>N</strong> = 20 agents</span>
-            <span><strong>Rounds</strong> = 20</span>
-            <span><strong>&gamma;</strong> = 1.0</span>
-            <span><strong>Q<sub>0</sub></strong> = 0</span>
-            <span><strong>PD</strong> = (R,T,P,S) = (3,5,1,0)</span>
-        </div>
-
-    </section>
-
-
-
-    <!-- =======================================================
-         MODEL SIMULATIONS
-    ======================================================== -->
-
-    <section class="simulation-section">
-
-        <div class="models-grid">
-
-            <!-- BASELINE -->
-
-            <article class="model-card baseline-card">
-
-                <div class="model-header">
-
-                    <div>
-                        <div class="model-label baseline-label">
-                            EXPERIMENT 1
-                        </div>
-
-                        <h2>Baseline Model</h2>
-
-                        <p>
-                            Agents learn whether to cooperate or defect.
-                            Partnerships are reconstructed every round using
-                            random or assortative rematching according to
-                            <span class="math">m</span>.
-                        </p>
-                    </div>
-
-                    <div class="model-badge baseline-badge">
-                        No learned<br>partner retention
-                    </div>
-
-                </div>
-
-
-                <div class="mechanism baseline-mechanism">
-
-                    <span>PD interaction</span>
-                    <span class="arrow">→</span>
-
-                    <span>Q-value learning</span>
-                    <span class="arrow">→</span>
-
-                    <span>Rematching</span>
-
-                </div>
-
-
-                <div class="network-container">
-
-                    <svg
-                        id="baselineNetwork"
-                        class="network"
-                        viewBox="0 0 600 420"
-                        aria-label="Baseline agent network"
-                    ></svg>
-
-                    <div class="network-legend">
-
-                        <div>
-                            <span class="legend-node baseline-cooperate-node">C</span>
-                            Cooperating
-                        </div>
-
-                        <div>
-                            <span class="legend-node baseline-defect-node">D</span>
-                            Defecting
-                        </div>
-
-                        <div>
-                            <span class="legend-line baseline-line"></span>
-                            Current partnership
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="metrics-grid">
-
-                    <div class="metric">
-                        <span class="metric-title">Iteration</span>
-                        <strong id="baselineIteration">0</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Cooperation</span>
-                        <strong id="baselineCooperation">—</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Cooperators</span>
-                        <strong id="baselineCooperators">—</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Rematching</span>
-                        <strong id="baselineSwitching">100%</strong>
-                    </div>
-
-                </div>
-
-
-                <div class="chart-box">
-
-                    <div class="chart-heading">
-                        <span>Cooperation during training</span>
-                        <span class="baseline-text">Baseline</span>
-                    </div>
-
-                    <canvas id="baselineChart"></canvas>
-
-                </div>
-
-            </article>
-
-
-
-            <!-- HYBRID -->
-
-            <article class="model-card hybrid-card">
-
-                <div class="model-header">
-
-                    <div>
-                        <div class="model-label hybrid-label">
-                            EXPERIMENT 2
-                        </div>
-
-                        <h2>Hybrid Model</h2>
-
-                        <p>
-                            Agents learn both Prisoner&rsquo;s Dilemma behaviour
-                            and whether to stay with or switch from their current
-                            partner. Only dissolved partnerships enter rematching.
-                        </p>
-                    </div>
-
-                    <div class="model-badge hybrid-badge">
-                        Learned<br>stay / switch
-                    </div>
-
-                </div>
-
-
-                <div class="mechanism hybrid-mechanism">
-
-                    <span>Stay / switch</span>
-                    <span class="arrow">→</span>
-
-                    <span>Selective retention</span>
-                    <span class="arrow">→</span>
-
-                    <span>Rematching</span>
-                    <span class="arrow">→</span>
-
-                    <span>PD interaction</span>
-
-                </div>
-
-
-                <div class="network-container">
-
-                    <svg
-                        id="hybridNetwork"
-                        class="network"
-                        viewBox="0 0 600 420"
-                        aria-label="Hybrid agent network"
-                    ></svg>
-
-                    <div class="network-legend">
-
-                        <div>
-                            <span class="legend-node hybrid-cooperate-node">C</span>
-                            Cooperating
-                        </div>
-
-                        <div>
-                            <span class="legend-node hybrid-defect-node">D</span>
-                            Defecting
-                        </div>
-
-                        <div>
-                            <span class="legend-line hybrid-line"></span>
-                            Current partnership
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="metrics-grid">
-
-                    <div class="metric">
-                        <span class="metric-title">Iteration</span>
-                        <strong id="hybridIteration">0</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Cooperation</span>
-                        <strong id="hybridCooperation">—</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Cooperators</span>
-                        <strong id="hybridCooperators">—</strong>
-                    </div>
-
-                    <div class="metric">
-                        <span class="metric-title">Switch rate</span>
-                        <strong id="hybridSwitching">—</strong>
-                    </div>
-
-                </div>
-
-
-                <div class="chart-box">
-
-                    <div class="chart-heading">
-                        <span>Cooperation during training</span>
-                        <span class="hybrid-text">Hybrid</span>
-                    </div>
-
-                    <canvas id="hybridChart"></canvas>
-
-                </div>
-
-            </article>
+        <div class="fixed-parameters">
+
+            <span>N = 20 agents</span>
+            <span>20 PD rounds / iteration</span>
+            <span>γ = 1.0</span>
+            <span>Initial Q = 0</span>
+            <span>R = 3</span>
+            <span>T = 5</span>
+            <span>P = 1</span>
+            <span>S = 0</span>
 
         </div>
 
@@ -452,48 +200,273 @@
 
 
 
-    <!-- =======================================================
-         SHORT MODEL EXPLANATION
-    ======================================================== -->
+    <!-- =====================================================
+         TWO SIMULATIONS
+    ====================================================== -->
 
-    <section class="difference-section">
+    <section class="simulation-grid">
 
-        <div class="difference-content">
+        <!-- =================================================
+             BASELINE
+        ================================================== -->
 
-            <div class="difference-title">
-                <span class="section-number">THE CONTROLLED DIFFERENCE</span>
-                <h2>Partner formation versus partner retention</h2>
+        <article class="simulation-card baseline-card">
+
+            <div class="model-heading">
+
+                <div>
+
+                    <p class="experiment-label baseline-text">
+                        EXPERIMENT 1
+                    </p>
+
+                    <h2>Baseline</h2>
+
+                    <p>
+                        Agents learn to cooperate or defect.
+                        Every round, the entire population is rematched
+                        randomly or assortatively according to \(m\).
+                    </p>
+
+                </div>
+
+
+                <div class="baseline-tag model-tag">
+                    No learned<br>
+                    stay / switch
+                </div>
+
             </div>
 
 
-            <div class="difference-grid">
+            <div class="process baseline-process">
 
-                <div class="difference-item baseline-difference">
-                    <span class="difference-dot"></span>
+                <span>PD interaction</span>
 
-                    <div>
-                        <strong>Baseline</strong>
-                        <p>
-                            The value of <span class="math">m</span> determines
-                            whether the whole population is randomly or
-                            assortatively paired each round.
-                        </p>
-                    </div>
+                <b>→</b>
+
+                <span>Learn C / D</span>
+
+                <b>→</b>
+
+                <span>Full rematching</span>
+
+            </div>
+
+
+            <div class="simulation-stage baseline-stage">
+
+                <canvas id="baselineCanvas"></canvas>
+
+                <div class="stage-label">
+                    Current partnerships
+                </div>
+
+            </div>
+
+
+            <div class="legend">
+
+                <div>
+                    <span class="agent-demo baseline-cooperator">C</span>
+                    Cooperating
+                </div>
+
+                <div>
+                    <span class="agent-demo baseline-defector">D</span>
+                    Defecting
+                </div>
+
+                <div>
+                    <span class="line-demo baseline-line"></span>
+                    Partnership
+                </div>
+
+            </div>
+
+
+            <div class="metrics">
+
+                <div class="metric">
+                    <span>Iteration</span>
+                    <strong id="baselineIteration">0</strong>
+                </div>
+
+                <div class="metric main-metric">
+                    <span>Cooperation</span>
+                    <strong id="baselineCooperation">—</strong>
+                </div>
+
+                <div class="metric">
+                    <span>Cooperators</span>
+                    <strong id="baselineCooperators">—</strong>
+                </div>
+
+                <div class="metric">
+                    <span>Rematching</span>
+                    <strong>100%</strong>
+                </div>
+
+            </div>
+
+        </article>
+
+
+
+        <!-- =================================================
+             HYBRID
+        ================================================== -->
+
+        <article class="simulation-card hybrid-card">
+
+            <div class="model-heading">
+
+                <div>
+
+                    <p class="experiment-label hybrid-text">
+                        EXPERIMENT 2
+                    </p>
+
+                    <h2>Hybrid</h2>
+
+                    <p>
+                        Agents learn both C/D behaviour and whether
+                        their current relationship should be retained
+                        or dissolved.
+                    </p>
+
                 </div>
 
 
-                <div class="difference-item hybrid-difference">
-                    <span class="difference-dot"></span>
-
-                    <div>
-                        <strong>Hybrid</strong>
-                        <p>
-                            Agents first learn whether their existing relationship
-                            should remain. Assortative rematching is applied only
-                            to agents whose partnership has been dissolved.
-                        </p>
-                    </div>
+                <div class="hybrid-tag model-tag">
+                    Learned<br>
+                    stay / switch
                 </div>
+
+            </div>
+
+
+            <div class="process hybrid-process">
+
+                <span>Stay / switch</span>
+
+                <b>→</b>
+
+                <span>Selective retention</span>
+
+                <b>→</b>
+
+                <span>Rematch switchers</span>
+
+                <b>→</b>
+
+                <span>PD</span>
+
+            </div>
+
+
+            <div class="simulation-stage hybrid-stage">
+
+                <canvas id="hybridCanvas"></canvas>
+
+                <div class="stage-label">
+                    Current partnerships
+                </div>
+
+            </div>
+
+
+            <div class="legend">
+
+                <div>
+                    <span class="agent-demo hybrid-cooperator">C</span>
+                    Cooperating
+                </div>
+
+                <div>
+                    <span class="agent-demo hybrid-defector">D</span>
+                    Defecting
+                </div>
+
+                <div>
+                    <span class="line-demo hybrid-line"></span>
+                    Partnership
+                </div>
+
+            </div>
+
+
+            <div class="metrics">
+
+                <div class="metric">
+                    <span>Iteration</span>
+                    <strong id="hybridIteration">0</strong>
+                </div>
+
+                <div class="metric main-metric">
+                    <span>Cooperation</span>
+                    <strong id="hybridCooperation">—</strong>
+                </div>
+
+                <div class="metric">
+                    <span>Cooperators</span>
+                    <strong id="hybridCooperators">—</strong>
+                </div>
+
+                <div class="metric">
+                    <span>Learned switch rate</span>
+                    <strong id="hybridSwitching">—</strong>
+                </div>
+
+            </div>
+
+        </article>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         ONLY SHORT EXPLANATION
+    ====================================================== -->
+
+    <section class="difference">
+
+        <p class="small-heading">
+            WHAT YOU ARE WATCHING
+        </p>
+
+        <h2>
+            Same learning environment. Different relationship mechanism.
+        </h2>
+
+
+        <div class="difference-grid">
+
+            <div class="difference-box baseline-box">
+
+                <h3>Baseline</h3>
+
+                <p>
+                    Every round reconstructs the partnerships.
+                    With probability \(m\), rematching groups agents
+                    according to their previous PD behaviour.
+                    Otherwise pairing is random.
+                </p>
+
+            </div>
+
+
+            <div class="difference-box hybrid-box">
+
+                <h3>Hybrid</h3>
+
+                <p>
+                    Agents first choose stay or switch.
+                    A pair survives only when both select stay.
+                    Dissolved pairs enter the same random or
+                    assortative rematching procedure.
+                </p>
 
             </div>
 
@@ -505,14 +478,16 @@
 
 
 <footer>
+
     <p>
-        Panayiota Papafiggou · MSc Computer Science · University of Warwick · 2026
+        Panayiota Papafiggou · MSc Computer Science ·
+        University of Warwick · 2026
     </p>
 
-    <p class="footer-note">
-        Interactive browser demonstration based on the dissertation model logic.
-        Full experimental results are reported in the dissertation.
+    <p class="footer-small">
+        Interactive browser implementation based on the dissertation model logic.
     </p>
+
 </footer>
 
 

@@ -1,20 +1,26 @@
 "use strict";
 
-
 /* ============================================================
-   CONSTANTS
-   Based on dissertation model configuration
+   DISSERTATION CONFIGURATION
 ============================================================ */
 
 const N_AGENTS = 20;
-const ROUNDS_G = 20;
+const ROUNDS_PER_ITERATION = 20;
 const GAMMA = 1.0;
 
-const BASELINE_COLOUR = "#c06082";
-const HYBRID_COLOUR = "#7b6fd6";
+const BASELINE = "#c06082";
+const BASELINE_DARK = "#994662";
 
-const BASELINE_DARK = "#954561";
-const HYBRID_DARK = "#5d51b6";
+const HYBRID = "#7b6fd6";
+const HYBRID_DARK = "#594db4";
+
+
+/*
+    Prisoner's Dilemma reward matrices.
+
+    action 0 = Cooperate
+    action 1 = Defect
+*/
 
 const REWARD_1 = [
     [3, 0],
@@ -28,27 +34,37 @@ const REWARD_2 = [
 
 
 /* ============================================================
-   SEEDED RANDOM GENERATOR
+   SEEDED RANDOMNESS
 ============================================================ */
 
-function mulberry32(seed) {
+function seededRandom(seed) {
 
     return function () {
 
-        let t = seed += 0x6D2B79F5;
+        seed |= 0;
 
-        t = Math.imul(
-            t ^ (t >>> 15),
-            t | 1
-        );
+        seed =
+            seed + 0x6D2B79F5 | 0;
 
-        t ^= t + Math.imul(
-            t ^ (t >>> 7),
-            t | 61
-        );
+        let t = seed;
+
+        t =
+            Math.imul(
+                t ^ t >>> 15,
+                t | 1
+            );
+
+        t ^=
+            t +
+            Math.imul(
+                t ^ t >>> 7,
+                t | 61
+            );
 
         return (
-            (t ^ (t >>> 14)) >>> 0
+            (
+                t ^ t >>> 14
+            ) >>> 0
         ) / 4294967296;
     };
 }
@@ -60,102 +76,87 @@ function mulberry32(seed) {
 
 function stateToIndex(state) {
 
-    if (state === 0) return 0;
-    if (state === 1) return 1;
-    if (state === 100) return 2;
+    if (state === 0) {
+        return 0;
+    }
+
+    if (state === 1) {
+        return 1;
+    }
+
+    if (state === 100) {
+        return 2;
+    }
 
     return 3;
 }
 
 
-function clamp(value, low, high) {
+function shuffle(array, rng) {
 
-    return Math.max(
-        low,
-        Math.min(high, value)
-    );
-}
-
-
-function shuffle(array, random) {
-
-    const copy = array.slice();
+    const result =
+        array.slice();
 
     for (
-        let i = copy.length - 1;
+        let i = result.length - 1;
         i > 0;
         i--
     ) {
 
         const j =
             Math.floor(
-                random() * (i + 1)
+                rng() *
+                (i + 1)
             );
 
         [
-            copy[i],
-            copy[j]
-        ] = [
-            copy[j],
-            copy[i]
+            result[i],
+            result[j]
+        ]
+        =
+        [
+            result[j],
+            result[i]
         ];
     }
 
-    return copy;
+    return result;
 }
 
 
-function percentage(value) {
+function formatPercent(value) {
 
-    return `${(value * 100).toFixed(1)}%`;
+    return (
+        value * 100
+    ).toFixed(1) + "%";
 }
 
 
 /* ============================================================
-   CREATE Q TABLE
+   Q TABLE
 ============================================================ */
 
 function createQTable() {
 
-    const Q = [];
-
-    for (
-        let agent = 0;
-        agent < N_AGENTS;
-        agent++
-    ) {
-
-        const states = [];
-
-        for (
-            let state = 0;
-            state < 4;
-            state++
-        ) {
-
-            states.push([
-                0,
-                0
-            ]);
-        }
-
-        Q.push(states);
-    }
-
-    return Q;
+    return Array.from(
+        { length: N_AGENTS },
+        () =>
+            Array.from(
+                { length: 4 },
+                () => [0, 0]
+            )
+    );
 }
 
 
 /* ============================================================
-   ACTION SELECTION
+   BOLTZMANN ACTION SELECTION
 
-   IMPORTANT:
-   This deliberately mirrors the supplied Python model:
+   This intentionally mirrors the supplied Python implementation:
 
-       q0 = tau * Q[..., 0]
-       q1 = tau * Q[..., 1]
+       q0 = tau * Q
+       q1 = tau * Q
 
-   rather than changing the action-selection equation.
 ============================================================ */
 
 function selectAction(
@@ -163,7 +164,7 @@ function selectAction(
     agent,
     state,
     tau,
-    random
+    rng
 ) {
 
     const si =
@@ -186,41 +187,45 @@ function selectAction(
     const e1 =
         Math.exp(q1 - maxQ);
 
-    const p0 =
-        e0 / (e0 + e1);
+    const pCooperate =
+        e0 /
+        (e0 + e1);
 
     return (
-        random() < p0
-            ? 0
-            : 1
-    );
+        rng() <
+        pCooperate
+    )
+        ? 0
+        : 1;
 }
 
 
 /* ============================================================
-   PAIRING
+   RANDOM PAIRING
 ============================================================ */
 
 function randomPairsFromIds(
     ids,
-    random
+    rng
 ) {
 
-    const shuffled =
-        shuffle(ids, random);
+    const ordered =
+        shuffle(ids, rng);
 
     const pairs = [];
 
     for (
         let i = 0;
-        i + 1 < shuffled.length;
+        i + 1 < ordered.length;
         i += 2
     ) {
 
-        pairs.push([
-            shuffled[i],
-            shuffled[i + 1]
-        ]);
+        pairs.push(
+            [
+                ordered[i],
+                ordered[i + 1]
+            ]
+        );
     }
 
     return pairs;
@@ -228,126 +233,159 @@ function randomPairsFromIds(
 
 
 function randomPairs(
-    n,
-    random
+    count,
+    rng
 ) {
 
-    return randomPairsFromIds(
+    const ids =
         Array.from(
-            { length: n },
-            (_, index) => index
-        ),
-        random
+            { length: count },
+            (_, i) => i
+        );
+
+    return randomPairsFromIds(
+        ids,
+        rng
     );
 }
 
 
-/*
-    Mirrors create_assortative_pairs /
-    assortative_pairing_n.
+/* ============================================================
+   ASSORTATIVE PAIRING
 
-    Agents whose previous PD action is C
-    are paired with C agents where possible.
+   Previous C agents are preferentially paired with C.
+   Previous D agents are preferentially paired with D.
 
-    Previous D agents are paired with D
-    agents where possible.
-
-    Leftovers are pooled and paired.
-*/
+============================================================ */
 
 function assortativePairs(
     ids,
     actionsPD,
-    random
+    rng
 ) {
 
     const cooperators = [];
     const defectors = [];
 
-    ids.forEach(agent => {
+
+    for (
+        const id of ids
+    ) {
 
         if (
-            actionsPD[agent] === 0
+            actionsPD[id] === 0
         ) {
-            cooperators.push(agent);
+
+            cooperators.push(id);
+
         } else {
-            defectors.push(agent);
+
+            defectors.push(id);
         }
-    });
+    }
 
 
     const C =
-        shuffle(cooperators, random);
+        shuffle(
+            cooperators,
+            rng
+        );
 
     const D =
-        shuffle(defectors, random);
+        shuffle(
+            defectors,
+            rng
+        );
 
 
     const pairs = [];
     const leftovers = [];
 
 
-    let index = 0;
+    /* Cooperators */
+
+    let i = 0;
 
     while (
-        index + 1 < C.length
+        i + 1 < C.length
     ) {
 
-        pairs.push([
-            C[index],
-            C[index + 1]
-        ]);
+        pairs.push(
+            [
+                C[i],
+                C[i + 1]
+            ]
+        );
 
-        index += 2;
+        i += 2;
     }
+
 
     if (
-        index < C.length
+        i < C.length
     ) {
-        leftovers.push(C[index]);
+
+        leftovers.push(
+            C[i]
+        );
     }
 
 
-    index = 0;
+    /* Defectors */
+
+    i = 0;
 
     while (
-        index + 1 < D.length
+        i + 1 < D.length
     ) {
 
-        pairs.push([
-            D[index],
-            D[index + 1]
-        ]);
+        pairs.push(
+            [
+                D[i],
+                D[i + 1]
+            ]
+        );
 
-        index += 2;
+        i += 2;
     }
+
 
     if (
-        index < D.length
+        i < D.length
     ) {
-        leftovers.push(D[index]);
+
+        leftovers.push(
+            D[i]
+        );
     }
 
+
+    /*
+        If one C and one D are left,
+        they are paired together.
+    */
 
     const leftoverPairs =
         randomPairsFromIds(
             leftovers,
-            random
+            rng
         );
+
 
     pairs.push(
         ...leftoverPairs
     );
+
 
     return pairs;
 }
 
 
 /* ============================================================
-   MEMORY AND Q UPDATE
+   EXPERIENCE MEMORY
 ============================================================ */
 
-function createMemories() {
+function createMemory() {
 
     return Array.from(
         { length: N_AGENTS },
@@ -357,34 +395,35 @@ function createMemories() {
 
 
 function storeExperience(
-    memories,
+    memory,
     agent,
     state,
     action,
     reward
 ) {
 
-    memories[agent].push({
-        state,
-        action,
-        reward
-    });
+    memory[agent].push(
+        {
+            state,
+            action,
+            reward
+        }
+    );
 }
 
 
-/*
-    Mirrors:
+/* ============================================================
+   BACKWARD RETURN Q UPDATE
 
-        running = reward + gamma * running
+   running = reward + gamma * running
 
-        Q = (1-lr)Q + lr*running
+   Q = (1-alpha)Q + alpha * running
 
-    and processes each trajectory backwards.
-*/
+============================================================ */
 
 function updateQValues(
     Q,
-    memories,
+    memory,
     learningRate
 ) {
 
@@ -396,61 +435,62 @@ function updateQValues(
 
         let running = 0;
 
-        const memory =
-            memories[agent];
+        const experiences =
+            memory[agent];
 
 
         for (
-            let k = memory.length - 1;
+            let k =
+                experiences.length - 1;
             k >= 0;
             k--
         ) {
 
-            const experience =
-                memory[k];
+            const e =
+                experiences[k];
+
 
             running =
-                experience.reward +
-                GAMMA * running;
+                e.reward +
+                GAMMA *
+                running;
 
 
             const si =
                 stateToIndex(
-                    experience.state
+                    e.state
                 );
 
-            const action =
-                experience.action;
 
-
-            Q[agent][si][action] =
-                (1 - learningRate) *
-                    Q[agent][si][action]
+            Q[agent][si][e.action]
+                =
+                (
+                    1 -
+                    learningRate
+                )
+                *
+                Q[agent][si][e.action]
                 +
-                learningRate *
-                    running;
+                learningRate
+                *
+                running;
         }
 
 
-        memories[agent] = [];
+        memory[agent] = [];
     }
 }
 
 
 /* ============================================================
-   MODEL CLASS
+   MODEL
 ============================================================ */
 
-class MARLModel {
+class Model {
 
     constructor(type) {
 
         this.type = type;
-
-        this.seed =
-            type === "baseline"
-                ? 1235
-                : 1235;
 
         this.reset();
     }
@@ -458,98 +498,144 @@ class MARLModel {
 
     reset() {
 
-        this.random =
-            mulberry32(this.seed);
+        /*
+            Same deterministic starting seed
+            for visual comparability.
+        */
+
+        this.rng =
+            seededRandom(1235);
 
 
         this.Q =
             createQTable();
 
 
+        this.memory =
+            createMemory();
+
+
         this.actionsPD =
             Array.from(
                 { length: N_AGENTS },
                 () =>
-                    this.random() < 0.5
-                        ? 0
-                        : 1
+                    (
+                        this.rng() <
+                        0.5
+                    )
+                    ? 0
+                    : 1
             );
 
 
         this.groups =
             randomPairs(
                 N_AGENTS,
-                this.random
+                this.rng
             );
-
-
-        this.memories =
-            createMemories();
 
 
         this.iteration = 0;
 
-        this.lastCooperation = 0;
+        this.cooperation = 0;
 
-        this.lastSwitchRate =
-            this.type === "baseline"
+        this.switchRate =
+            this.type ===
+            "baseline"
                 ? 1
                 : 0;
 
-        this.history = [];
 
-        this.switchHistory = [];
+        /*
+            Smooth animation positions.
+        */
+
+        this.positions =
+            Array.from(
+                { length: N_AGENTS },
+                () => ({
+                    x: 0,
+                    y: 0
+                })
+            );
+
+
+        this.targets =
+            Array.from(
+                { length: N_AGENTS },
+                () => ({
+                    x: 0,
+                    y: 0
+                })
+            );
+
+
+        assignPairTargets(this);
+
+        for (
+            let i = 0;
+            i < N_AGENTS;
+            i++
+        ) {
+
+            this.positions[i].x =
+                this.targets[i].x;
+
+            this.positions[i].y =
+                this.targets[i].y;
+        }
     }
 
 
     /* ========================================================
-       BASELINE REMATCHING
+       BASELINE REMATCH
     ======================================================== */
 
-    rematchBaseline(m) {
+    baselineRematch(m) {
 
         const ids =
             Array.from(
                 { length: N_AGENTS },
-                (_, index) => index
+                (_, i) => i
             );
 
 
         if (
-            this.random() < m
+            this.rng() < m
         ) {
 
             this.groups =
                 assortativePairs(
                     ids,
                     this.actionsPD,
-                    this.random
+                    this.rng
                 );
 
         } else {
 
             this.groups =
-                randomPairs(
-                    N_AGENTS,
-                    this.random
+                randomPairsFromIds(
+                    ids,
+                    this.rng
                 );
         }
     }
 
 
     /* ========================================================
-       HYBRID REMATCHING
+       HYBRID STAY/SWITCH + REMATCH
     ======================================================== */
 
-    rematchHybrid(
+    hybridRematch(
         m,
         tau
     ) {
 
-        const groupsStay = [];
-        const switchPool = [];
+        const stayingPairs = [];
 
-        let switchActions = 0;
+        const switchingAgents = [];
+
+        let switchCount = 0;
 
 
         for (
@@ -561,11 +647,8 @@ class MARLModel {
 
 
             /*
-                Switching state is the partner's
-                previous PD action:
-
-                    0 = previous C
-                    1 = previous D
+                Switching state:
+                partner's previous PD action.
             */
 
             const stateI =
@@ -575,125 +658,120 @@ class MARLModel {
                 this.actionsPD[i];
 
 
-            const actionI =
+            const switchI =
                 selectAction(
                     this.Q,
                     i,
                     stateI,
                     tau,
-                    this.random
+                    this.rng
                 );
 
 
-            const actionJ =
+            const switchJ =
                 selectAction(
                     this.Q,
                     j,
                     stateJ,
                     tau,
-                    this.random
+                    this.rng
                 );
 
 
             /*
-                Zero immediate reward for the
-                relationship decision.
-
-                Later PD rewards propagate backwards.
+                Switching experiences have
+                zero immediate reward.
             */
 
             storeExperience(
-                this.memories,
+                this.memory,
                 i,
                 stateI,
-                actionI,
+                switchI,
                 0
             );
 
 
             storeExperience(
-                this.memories,
+                this.memory,
                 j,
                 stateJ,
-                actionJ,
+                switchJ,
                 0
             );
 
 
-            switchActions +=
-                actionI + actionJ;
+            switchCount +=
+                switchI +
+                switchJ;
 
 
             /*
-                Relationship continues ONLY if
+                Pair survives ONLY if
                 both agents choose stay.
-
-                If either selects switch,
-                both agents enter rematching.
             */
 
             if (
-                actionI === 1 ||
-                actionJ === 1
+                switchI === 0 &&
+                switchJ === 0
             ) {
 
-                switchPool.push(i);
-                switchPool.push(j);
+                stayingPairs.push(
+                    [i, j]
+                );
 
             } else {
 
-                groupsStay.push([
-                    i,
-                    j
-                ]);
+                switchingAgents.push(i);
+                switchingAgents.push(j);
             }
         }
 
 
-        let rematchedGroups = [];
+        let newPairs = [];
 
 
         if (
-            switchPool.length > 0
+            switchingAgents.length > 0
         ) {
 
             if (
-                this.random() < m
+                this.rng() < m
             ) {
 
-                rematchedGroups =
+                newPairs =
                     assortativePairs(
-                        switchPool,
+                        switchingAgents,
                         this.actionsPD,
-                        this.random
+                        this.rng
                     );
 
             } else {
 
-                rematchedGroups =
+                newPairs =
                     randomPairsFromIds(
-                        switchPool,
-                        this.random
+                        switchingAgents,
+                        this.rng
                     );
             }
         }
 
 
         this.groups = [
-            ...groupsStay,
-            ...rematchedGroups
+            ...stayingPairs,
+            ...newPairs
         ];
 
 
         return (
-            switchActions /
+            switchCount /
             N_AGENTS
         );
     }
 
 
     /* ========================================================
-       ONE FULL TRAINING ITERATION
+       ONE TRAINING ITERATION
     ======================================================== */
 
     step(
@@ -707,173 +785,184 @@ class MARLModel {
         let DC = 0;
         let DD = 0;
 
-        let totalSwitchRate = 0;
+        let switchSum = 0;
 
 
         for (
             let round = 0;
-            round < ROUNDS_G;
+            round <
+            ROUNDS_PER_ITERATION;
             round++
         ) {
 
             /*
-                REMATCHING OCCURS BEFORE
-                EACH PD INTERACTION ROUND.
+                Relationship stage.
             */
 
             if (
-                this.type === "baseline"
+                this.type ===
+                "baseline"
             ) {
 
-                this.rematchBaseline(m);
+                this.baselineRematch(
+                    m
+                );
 
-                totalSwitchRate += 1;
+                switchSum += 1;
 
             } else {
 
-                totalSwitchRate +=
-                    this.rematchHybrid(
+                switchSum +=
+                    this.hybridRematch(
                         m,
                         tau
                     );
             }
 
 
-            /* ================================================
-               PLAY PD FOR EACH CURRENT PAIR
-            ================================================= */
+            /*
+                Prisoner's Dilemma stage.
+            */
 
             for (
-                const pair of this.groups
+                const pair of
+                this.groups
             ) {
 
-                const i = pair[0];
-                const j = pair[1];
+                const a = pair[0];
+                const b = pair[1];
 
 
-                const previousI =
-                    this.actionsPD[i];
+                const previousA =
+                    this.actionsPD[a];
 
-                const previousJ =
-                    this.actionsPD[j];
+                const previousB =
+                    this.actionsPD[b];
 
 
                 /*
-                    PD state labels follow Python:
+                    PD state:
 
                     100 = partner previously C
                     101 = partner previously D
                 */
 
-                const stateI =
-                    100 + previousJ;
+                const stateA =
+                    100 +
+                    previousB;
 
-                const stateJ =
-                    100 + previousI;
+                const stateB =
+                    100 +
+                    previousA;
 
 
-                const actionI =
+                const actionA =
                     selectAction(
                         this.Q,
-                        i,
-                        stateI,
+                        a,
+                        stateA,
                         tau,
-                        this.random
+                        this.rng
                     );
 
 
-                const actionJ =
+                const actionB =
                     selectAction(
                         this.Q,
-                        j,
-                        stateJ,
+                        b,
+                        stateB,
                         tau,
-                        this.random
+                        this.rng
                     );
 
 
-                const rewardI =
-                    REWARD_1[actionI][actionJ];
+                const rewardA =
+                    REWARD_1
+                        [actionA]
+                        [actionB];
 
-                const rewardJ =
-                    REWARD_2[actionI][actionJ];
+
+                const rewardB =
+                    REWARD_2
+                        [actionA]
+                        [actionB];
 
 
                 storeExperience(
-                    this.memories,
-                    i,
-                    stateI,
-                    actionI,
-                    rewardI
+                    this.memory,
+                    a,
+                    stateA,
+                    actionA,
+                    rewardA
                 );
 
 
                 storeExperience(
-                    this.memories,
-                    j,
-                    stateJ,
-                    actionJ,
-                    rewardJ
+                    this.memory,
+                    b,
+                    stateB,
+                    actionB,
+                    rewardB
                 );
 
-
-                /*
-                    Count PD outcome
-                */
 
                 if (
-                    actionI === 0 &&
-                    actionJ === 0
+                    actionA === 0 &&
+                    actionB === 0
                 ) {
+
                     CC++;
-                }
 
-                else if (
-                    actionI === 0 &&
-                    actionJ === 1
+                } else if (
+                    actionA === 0 &&
+                    actionB === 1
                 ) {
+
                     CD++;
-                }
 
-                else if (
-                    actionI === 1 &&
-                    actionJ === 0
+                } else if (
+                    actionA === 1 &&
+                    actionB === 0
                 ) {
-                    DC++;
-                }
 
-                else {
+                    DC++;
+
+                } else {
+
                     DD++;
                 }
 
 
-                this.actionsPD[i] =
-                    actionI;
+                this.actionsPD[a] =
+                    actionA;
 
-                this.actionsPD[j] =
-                    actionJ;
+                this.actionsPD[b] =
+                    actionB;
             }
         }
 
 
         /*
-            Q VALUES UPDATE ONCE AFTER THE
-            20-ROUND REPEATED GAME.
+            Exactly as in model:
+            update after repeated game.
         */
 
         updateQValues(
             this.Q,
-            this.memories,
+            this.memory,
             learningRate
         );
 
 
-        const totalOutcomes =
-            CC + CD + DC + DD;
+        const games =
+            CC +
+            CD +
+            DC +
+            DD;
 
 
-        const cooperation =
-            totalOutcomes > 0
+        this.cooperation =
+            games > 0
                 ?
                 (
                     2 * CC +
@@ -883,437 +972,245 @@ class MARLModel {
                 /
                 (
                     2 *
-                    totalOutcomes
+                    games
                 )
                 :
                 0;
 
 
+        this.switchRate =
+            switchSum /
+            ROUNDS_PER_ITERATION;
+
+
         this.iteration++;
 
-        this.lastCooperation =
-            cooperation;
 
-
-        this.lastSwitchRate =
-            totalSwitchRate /
-            ROUNDS_G;
-
-
-        this.history.push(
-            cooperation
+        assignPairTargets(
+            this
         );
-
-
-        this.switchHistory.push(
-            this.lastSwitchRate
-        );
-
-
-        /*
-            Browser graph does not need
-            tens of thousands of points.
-        */
-
-        if (
-            this.history.length > 500
-        ) {
-
-            this.history.shift();
-
-            this.switchHistory.shift();
-        }
     }
 
 
-    getCooperatorCount() {
+    cooperatorCount() {
 
-        let count = 0;
+        let total = 0;
 
         for (
-            const action of this.actionsPD
+            const action of
+            this.actionsPD
         ) {
 
             if (
                 action === 0
             ) {
-                count++;
+                total++;
             }
         }
 
-        return count;
+        return total;
     }
 }
 
 
 /* ============================================================
-   CREATE MODELS
+   PAIR DISPLAY LAYOUT
+
+   Each current partnership occupies a visible slot.
+
+   This is what makes rematching obvious:
+   agents physically move into different pair positions.
 ============================================================ */
 
-const baseline =
-    new MARLModel("baseline");
-
-const hybrid =
-    new MARLModel("hybrid");
-
-
-/* ============================================================
-   DOM
-============================================================ */
-
-const mSlider =
-    document.getElementById("mSlider");
-
-const lrSlider =
-    document.getElementById("lrSlider");
-
-const tauSlider =
-    document.getElementById("tauSlider");
-
-const speedSlider =
-    document.getElementById("speedSlider");
-
-
-const mValue =
-    document.getElementById("mValue");
-
-const lrValue =
-    document.getElementById("lrValue");
-
-const tauValue =
-    document.getElementById("tauValue");
-
-const speedValue =
-    document.getElementById("speedValue");
-
-
-const startButton =
-    document.getElementById("startButton");
-
-const pauseButton =
-    document.getElementById("pauseButton");
-
-const resetButton =
-    document.getElementById("resetButton");
-
-const simulationStatus =
-    document.getElementById("simulationStatus");
-
-
-const baselineNetwork =
-    document.getElementById(
-        "baselineNetwork"
-    );
-
-const hybridNetwork =
-    document.getElementById(
-        "hybridNetwork"
-    );
-
-
-const baselineChart =
-    document.getElementById(
-        "baselineChart"
-    );
-
-const hybridChart =
-    document.getElementById(
-        "hybridChart"
-    );
-
-
-/* ============================================================
-   NETWORK NODE POSITIONS
-============================================================ */
-
-const agentPositions = [];
-
-
-function generateAgentPositions() {
-
-    agentPositions.length = 0;
-
-    const centerX = 300;
-    const centerY = 210;
-
-    const outerRadius = 166;
-    const innerRadius = 105;
-
-
-    for (
-        let i = 0;
-        i < N_AGENTS;
-        i++
-    ) {
-
-        const ring =
-            i % 2 === 0
-                ? outerRadius
-                : innerRadius;
-
-
-        const angle =
-            (
-                Math.PI * 2 *
-                i /
-                N_AGENTS
-            )
-            -
-            Math.PI / 2;
-
-
-        const x =
-            centerX +
-            ring *
-            Math.cos(angle);
-
-
-        const y =
-            centerY +
-            ring *
-            Math.sin(angle);
-
-
-        agentPositions.push({
-            x,
-            y
-        });
-    }
-}
-
-
-generateAgentPositions();
-
-
-/* ============================================================
-   DRAW NETWORK
-============================================================ */
-
-function drawNetwork(
-    svg,
-    model,
-    colour,
-    darkColour
-) {
-
-    svg.innerHTML = "";
-
+function assignPairTargets(model) {
 
     /*
-        Partnership lines first
+        10 partnership slots:
+        2 columns × 5 rows.
     */
 
-    for (
-        const pair of model.groups
-    ) {
+    const pairSlots = [
 
-        const a =
-            agentPositions[pair[0]];
+        { x: 0.25, y: 0.15 },
+        { x: 0.75, y: 0.15 },
 
-        const b =
-            agentPositions[pair[1]];
+        { x: 0.25, y: 0.32 },
+        { x: 0.75, y: 0.32 },
 
+        { x: 0.25, y: 0.49 },
+        { x: 0.75, y: 0.49 },
 
-        const line =
-            document.createElementNS(
-                "http://www.w3.org/2000/svg",
-                "line"
-            );
+        { x: 0.25, y: 0.66 },
+        { x: 0.75, y: 0.66 },
 
+        { x: 0.25, y: 0.83 },
+        { x: 0.75, y: 0.83 }
 
-        line.setAttribute(
-            "x1",
-            a.x
-        );
-
-        line.setAttribute(
-            "y1",
-            a.y
-        );
-
-        line.setAttribute(
-            "x2",
-            b.x
-        );
-
-        line.setAttribute(
-            "y2",
-            b.y
-        );
+    ];
 
 
-        line.setAttribute(
-            "class",
-            `edge ${model.type}`
-        );
+    model.groups.forEach(
+        (pair, index) => {
+
+            const slot =
+                pairSlots[index];
 
 
-        svg.appendChild(line);
-    }
+            if (!slot) {
+                return;
+            }
 
 
-    /*
-        Agents
-    */
+            /*
+                Both partners shown close together.
+            */
 
-    for (
-        let i = 0;
-        i < N_AGENTS;
-        i++
-    ) {
+            model.targets[
+                pair[0]
+            ] = {
 
-        const position =
-            agentPositions[i];
+                x:
+                    slot.x -
+                    0.055,
 
-        const cooperating =
-            model.actionsPD[i] === 0;
+                y:
+                    slot.y
 
-
-        const group =
-            document.createElementNS(
-                "http://www.w3.org/2000/svg",
-                "g"
-            );
+            };
 
 
-        const circle =
-            document.createElementNS(
-                "http://www.w3.org/2000/svg",
-                "circle"
-            );
+            model.targets[
+                pair[1]
+            ] = {
 
+                x:
+                    slot.x +
+                    0.055,
 
-        circle.setAttribute(
-            "cx",
-            position.x
-        );
+                y:
+                    slot.y
 
-        circle.setAttribute(
-            "cy",
-            position.y
-        );
-
-        circle.setAttribute(
-            "r",
-            "19"
-        );
-
-
-        circle.setAttribute(
-            "fill",
-            cooperating
-                ? colour
-                : "#ffffff"
-        );
-
-
-        circle.setAttribute(
-            "stroke",
-            darkColour
-        );
-
-
-        circle.setAttribute(
-            "class",
-            "agent-circle"
-        );
-
-
-        const text =
-            document.createElementNS(
-                "http://www.w3.org/2000/svg",
-                "text"
-            );
-
-
-        text.setAttribute(
-            "x",
-            position.x
-        );
-
-        text.setAttribute(
-            "y",
-            position.y + 0.5
-        );
-
-
-        text.setAttribute(
-            "class",
-            cooperating
-                ?
-                "agent-text"
-                :
-                "agent-text defector-text"
-        );
-
-
-        text.textContent =
-            cooperating
-                ? "C"
-                : "D";
-
-
-        group.appendChild(circle);
-        group.appendChild(text);
-
-        svg.appendChild(group);
-    }
+            };
+        }
+    );
 }
 
 
 /* ============================================================
-   CANVAS CHART
+   CANVAS DRAWING
 ============================================================ */
 
-function prepareCanvas(canvas) {
+function resizeCanvas(canvas) {
 
     const rect =
         canvas.getBoundingClientRect();
 
-    const ratio =
-        window.devicePixelRatio || 1;
+    const scale =
+        window.devicePixelRatio ||
+        1;
 
 
-    canvas.width =
-        rect.width * ratio;
+    if (
+        canvas.width !==
+        Math.floor(
+            rect.width *
+            scale
+        )
+        ||
+        canvas.height !==
+        Math.floor(
+            rect.height *
+            scale
+        )
+    ) {
 
-    canvas.height =
-        rect.height * ratio;
+        canvas.width =
+            Math.floor(
+                rect.width *
+                scale
+            );
+
+        canvas.height =
+            Math.floor(
+                rect.height *
+                scale
+            );
+    }
 
 
-    const context =
+    const ctx =
         canvas.getContext("2d");
 
 
-    context.setTransform(
-        ratio,
+    ctx.setTransform(
+        scale,
         0,
         0,
-        ratio,
+        scale,
         0,
         0
     );
 
 
     return {
-        context,
+        ctx,
         width: rect.width,
         height: rect.height
     };
 }
 
 
-function drawChart(
+/* ============================================================
+   ANIMATION
+============================================================ */
+
+function animatePositions(model) {
+
+    for (
+        let i = 0;
+        i < N_AGENTS;
+        i++
+    ) {
+
+        model.positions[i].x
+            +=
+            (
+                model.targets[i].x -
+                model.positions[i].x
+            )
+            *
+            0.14;
+
+
+        model.positions[i].y
+            +=
+            (
+                model.targets[i].y -
+                model.positions[i].y
+            )
+            *
+            0.14;
+    }
+}
+
+
+/* ============================================================
+   DRAW ONE MODEL
+============================================================ */
+
+function drawModel(
     canvas,
-    values,
-    colour
+    model,
+    colour,
+    darkColour
 ) {
 
     const {
-        context: ctx,
+        ctx,
         width,
         height
-    } = prepareCanvas(canvas);
+    } =
+        resizeCanvas(canvas);
 
 
     ctx.clearRect(
@@ -1324,193 +1221,377 @@ function drawChart(
     );
 
 
-    const padding = {
-        left: 34,
-        right: 10,
-        top: 9,
-        bottom: 23
-    };
-
-
-    const chartWidth =
-        width -
-        padding.left -
-        padding.right;
-
-
-    const chartHeight =
-        height -
-        padding.top -
-        padding.bottom;
+    animatePositions(
+        model
+    );
 
 
     /*
-        Grid
+        Pairing boxes.
     */
 
     ctx.strokeStyle =
-        "#eceaf0";
+        "rgba(110,105,120,0.08)";
 
     ctx.lineWidth = 1;
 
-    ctx.fillStyle =
-        "#8c8993";
 
-    ctx.font =
-        "10px sans-serif";
+    const slotYs = [
+        0.15,
+        0.32,
+        0.49,
+        0.66,
+        0.83
+    ];
 
 
     for (
-        let tick = 0;
-        tick <= 4;
-        tick++
+        const yNorm of
+        slotYs
     ) {
 
-        const value =
-            tick / 4;
+        for (
+            const xNorm of
+            [0.25, 0.75]
+        ) {
+
+            const boxWidth =
+                width * 0.32;
+
+            const boxHeight =
+                58;
 
 
-        const y =
-            padding.top +
-            chartHeight *
-            (1 - value);
+            const bx =
+                width *
+                xNorm -
+                boxWidth / 2;
+
+            const by =
+                height *
+                yNorm -
+                boxHeight / 2;
+
+
+            roundedRect(
+                ctx,
+                bx,
+                by,
+                boxWidth,
+                boxHeight,
+                11
+            );
+
+
+            ctx.stroke();
+        }
+    }
+
+
+    /*
+        Draw partnership lines first.
+    */
+
+    for (
+        const pair of
+        model.groups
+    ) {
+
+        const first =
+            model.positions[
+                pair[0]
+            ];
+
+        const second =
+            model.positions[
+                pair[1]
+            ];
 
 
         ctx.beginPath();
 
+
         ctx.moveTo(
-            padding.left,
-            y
+            first.x * width,
+            first.y * height
         );
 
+
         ctx.lineTo(
-            width -
-            padding.right,
-            y
+            second.x * width,
+            second.y * height
         );
+
+
+        ctx.strokeStyle =
+            colour;
+
+        ctx.globalAlpha =
+            model.type ===
+            "baseline"
+                ? 0.55
+                : 0.68;
+
+        ctx.lineWidth = 4;
+
+        ctx.stroke();
+
+        ctx.globalAlpha = 1;
+    }
+
+
+    /*
+        Agents.
+    */
+
+    for (
+        let agent = 0;
+        agent <
+        N_AGENTS;
+        agent++
+    ) {
+
+        const position =
+            model.positions[
+                agent
+            ];
+
+
+        const x =
+            position.x *
+            width;
+
+        const y =
+            position.y *
+            height;
+
+
+        const cooperating =
+            model.actionsPD[
+                agent
+            ] === 0;
+
+
+        /*
+            Shadow.
+        */
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y + 3,
+            21,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            "rgba(40,35,50,0.08)";
+
+        ctx.fill();
+
+
+        /*
+            Node.
+        */
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            20,
+            0,
+            Math.PI * 2
+        );
+
+
+        ctx.fillStyle =
+            cooperating
+                ? colour
+                : "#ffffff";
+
+
+        ctx.fill();
+
+
+        ctx.lineWidth = 3;
+
+        ctx.strokeStyle =
+            darkColour;
 
         ctx.stroke();
 
 
-        ctx.fillText(
-            value.toFixed(2),
-            2,
-            y + 3
-        );
-    }
-
-
-    /*
-        Axes
-    */
-
-    ctx.strokeStyle =
-        "#c9c6d0";
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        padding.left,
-        padding.top
-    );
-
-    ctx.lineTo(
-        padding.left,
-        height -
-        padding.bottom
-    );
-
-    ctx.lineTo(
-        width -
-        padding.right,
-        height -
-        padding.bottom
-    );
-
-    ctx.stroke();
-
-
-    if (
-        values.length < 2
-    ) {
-
-        ctx.fillStyle =
-            "#a5a2ab";
+        /*
+            C / D
+        */
 
         ctx.font =
-            "12px sans-serif";
+            "700 12px Inter, sans-serif";
+
+        ctx.textAlign =
+            "center";
+
+        ctx.textBaseline =
+            "middle";
+
+
+        ctx.fillStyle =
+            cooperating
+                ? "#ffffff"
+                : darkColour;
+
 
         ctx.fillText(
-            "Run the simulation to generate a trajectory.",
-            padding.left + 13,
-            padding.top + 25
+            cooperating
+                ? "C"
+                : "D",
+            x,
+            y
         );
 
-        return;
+
+        /*
+            Tiny agent number.
+        */
+
+        ctx.font =
+            "9px Inter, sans-serif";
+
+        ctx.fillStyle =
+            "#9a96a0";
+
+
+        ctx.fillText(
+            String(
+                agent + 1
+            ),
+            x,
+            y + 34
+        );
     }
+}
 
 
-    /*
-        Cooperation trajectory
-    */
+/* ============================================================
+   ROUNDED RECT
+============================================================ */
 
-    ctx.strokeStyle =
-        colour;
-
-    ctx.lineWidth = 2.5;
-
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-
+function roundedRect(
+    ctx,
+    x,
+    y,
+    width,
+    height,
+    radius
+) {
 
     ctx.beginPath();
 
-
-    values.forEach(
-        (value, index) => {
-
-            const x =
-                padding.left +
-                (
-                    index /
-                    (values.length - 1)
-                )
-                *
-                chartWidth;
+    ctx.roundRect(
+        x,
+        y,
+        width,
+        height,
+        radius
+    );
+}
 
 
-            const y =
-                padding.top +
-                (
-                    1 -
-                    clamp(value, 0, 1)
-                )
-                *
-                chartHeight;
+/* ============================================================
+   MODELS
+============================================================ */
 
+const baselineModel =
+    new Model(
+        "baseline"
+    );
 
-            if (
-                index === 0
-            ) {
-
-                ctx.moveTo(
-                    x,
-                    y
-                );
-
-            } else {
-
-                ctx.lineTo(
-                    x,
-                    y
-                );
-            }
-        }
+const hybridModel =
+    new Model(
+        "hybrid"
     );
 
 
-    ctx.stroke();
-}
+/* ============================================================
+   ELEMENTS
+============================================================ */
+
+const baselineCanvas =
+    document.getElementById(
+        "baselineCanvas"
+    );
+
+const hybridCanvas =
+    document.getElementById(
+        "hybridCanvas"
+    );
+
+
+const mSlider =
+    document.getElementById(
+        "mSlider"
+    );
+
+const alphaSlider =
+    document.getElementById(
+        "alphaSlider"
+    );
+
+const tauSlider =
+    document.getElementById(
+        "tauSlider"
+    );
+
+const speedSlider =
+    document.getElementById(
+        "speedSlider"
+    );
+
+
+const mValue =
+    document.getElementById(
+        "mValue"
+    );
+
+const alphaValue =
+    document.getElementById(
+        "alphaValue"
+    );
+
+const tauValue =
+    document.getElementById(
+        "tauValue"
+    );
+
+const speedValue =
+    document.getElementById(
+        "speedValue"
+    );
+
+
+const runButton =
+    document.getElementById(
+        "runButton"
+    );
+
+const pauseButton =
+    document.getElementById(
+        "pauseButton"
+    );
+
+const resetButton =
+    document.getElementById(
+        "resetButton"
+    );
+
+
+const status =
+    document.getElementById(
+        "status"
+    );
 
 
 /* ============================================================
@@ -1519,122 +1600,93 @@ function drawChart(
 
 function updateMetrics() {
 
-    document
-        .getElementById(
-            "baselineIteration"
-        )
-        .textContent =
-            baseline.iteration
-                .toLocaleString();
+    document.getElementById(
+        "baselineIteration"
+    ).textContent =
+        baselineModel
+            .iteration
+            .toLocaleString();
 
 
-    document
-        .getElementById(
-            "hybridIteration"
-        )
-        .textContent =
-            hybrid.iteration
-                .toLocaleString();
+    document.getElementById(
+        "hybridIteration"
+    ).textContent =
+        hybridModel
+            .iteration
+            .toLocaleString();
 
 
-    document
-        .getElementById(
-            "baselineCooperation"
-        )
-        .textContent =
-            baseline.iteration === 0
-                ? "—"
-                : percentage(
-                    baseline.lastCooperation
-                );
+    document.getElementById(
+        "baselineCooperation"
+    ).textContent =
+        baselineModel.iteration === 0
+            ? "—"
+            :
+            formatPercent(
+                baselineModel.cooperation
+            );
 
 
-    document
-        .getElementById(
-            "hybridCooperation"
-        )
-        .textContent =
-            hybrid.iteration === 0
-                ? "—"
-                : percentage(
-                    hybrid.lastCooperation
-                );
+    document.getElementById(
+        "hybridCooperation"
+    ).textContent =
+        hybridModel.iteration === 0
+            ? "—"
+            :
+            formatPercent(
+                hybridModel.cooperation
+            );
 
 
-    document
-        .getElementById(
-            "baselineCooperators"
-        )
-        .textContent =
-            baseline.getCooperatorCount() +
-            " / " +
-            N_AGENTS;
+    document.getElementById(
+        "baselineCooperators"
+    ).textContent =
+        baselineModel
+            .cooperatorCount()
+        +
+        " / 20";
 
 
-    document
-        .getElementById(
-            "hybridCooperators"
-        )
-        .textContent =
-            hybrid.getCooperatorCount() +
-            " / " +
-            N_AGENTS;
+    document.getElementById(
+        "hybridCooperators"
+    ).textContent =
+        hybridModel
+            .cooperatorCount()
+        +
+        " / 20";
 
 
-    document
-        .getElementById(
-            "baselineSwitching"
-        )
-        .textContent =
-            "100%";
-
-
-    document
-        .getElementById(
-            "hybridSwitching"
-        )
-        .textContent =
-            hybrid.iteration === 0
-                ? "—"
-                : percentage(
-                    hybrid.lastSwitchRate
-                );
+    document.getElementById(
+        "hybridSwitching"
+    ).textContent =
+        hybridModel.iteration === 0
+            ? "—"
+            :
+            formatPercent(
+                hybridModel.switchRate
+            );
 }
 
 
 /* ============================================================
-   RENDER EVERYTHING
+   RENDER
 ============================================================ */
 
 function render() {
 
-    drawNetwork(
-        baselineNetwork,
-        baseline,
-        BASELINE_COLOUR,
+    drawModel(
+        baselineCanvas,
+        baselineModel,
+        BASELINE,
         BASELINE_DARK
     );
 
 
-    drawNetwork(
-        hybridNetwork,
-        hybrid,
-        HYBRID_COLOUR,
+    drawModel(
+        hybridCanvas,
+        hybridModel,
+        HYBRID,
         HYBRID_DARK
-    );
-
-
-    drawChart(
-        baselineChart,
-        baseline.history,
-        BASELINE_COLOUR
-    );
-
-
-    drawChart(
-        hybridChart,
-        hybrid.history,
-        HYBRID_COLOUR
     );
 
 
@@ -1643,106 +1695,168 @@ function render() {
 
 
 /* ============================================================
-   RUN LOOP
+   SIMULATION TIMER
+
+   Simulation steps are intentionally separated from the
+   visual animation loop so agents visibly move between pairs.
 ============================================================ */
 
 let running = false;
-let animationFrame = null;
-let lastFrame = 0;
+
+let simulationTimer = null;
 
 
-function simulationLoop(timestamp) {
+/*
+    Every simulation tick executes the number
+    of iterations selected by "speed".
+*/
+
+function runSimulationTick() {
 
     if (!running) {
         return;
     }
 
 
+    const m =
+        Number(
+            mSlider.value
+        );
+
+
+    const alpha =
+        Number(
+            alphaSlider.value
+        );
+
+
+    const tau =
+        Number(
+            tauSlider.value
+        );
+
+
+    const speed =
+        Number(
+            speedSlider.value
+        );
+
+
     /*
-        Limit browser visual refresh rate
-        while multiple model iterations
-        can happen per frame.
+        Keep visual motion readable.
+
+        Higher speed executes more training
+        iterations per simulation tick.
     */
 
-    if (
-        timestamp - lastFrame >= 35
+    const steps =
+        Math.max(
+            1,
+            Math.ceil(
+                speed / 3
+            )
+        );
+
+
+    for (
+        let i = 0;
+        i < steps;
+        i++
     ) {
 
-        lastFrame = timestamp;
+        baselineModel.step(
+            m,
+            alpha,
+            tau
+        );
 
 
-        const m =
-            Number(mSlider.value);
-
-        const learningRate =
-            Number(lrSlider.value);
-
-        const tau =
-            Number(tauSlider.value);
-
-        const steps =
-            Number(speedSlider.value);
-
-
-        for (
-            let s = 0;
-            s < steps;
-            s++
-        ) {
-
-            baseline.step(
-                m,
-                learningRate,
-                tau
-            );
-
-
-            hybrid.step(
-                m,
-                learningRate,
-                tau
-            );
-        }
-
-
-        render();
+        hybridModel.step(
+            m,
+            alpha,
+            tau
+        );
     }
 
 
-    animationFrame =
-        requestAnimationFrame(
-            simulationLoop
+    /*
+        Delay shrinks as speed increases.
+    */
+
+    const delay =
+        Math.max(
+            70,
+            550 -
+            speed * 18
+        );
+
+
+    simulationTimer =
+        setTimeout(
+            runSimulationTick,
+            delay
         );
 }
 
 
 /* ============================================================
-   BUTTONS
+   VISUAL LOOP
 ============================================================ */
 
-startButton.addEventListener(
+function animationLoop() {
+
+    render();
+
+    requestAnimationFrame(
+        animationLoop
+    );
+}
+
+
+requestAnimationFrame(
+    animationLoop
+);
+
+
+/* ============================================================
+   RUN BUTTON
+============================================================ */
+
+runButton.addEventListener(
     "click",
     () => {
 
-        if (running) return;
+        if (running) {
+            return;
+        }
 
 
         running = true;
 
-        startButton.disabled = true;
-        pauseButton.disabled = false;
 
-        simulationStatus.textContent =
+        runButton.disabled =
+            true;
+
+        pauseButton.disabled =
+            false;
+
+
+        status.textContent =
             "Running";
 
+        status.classList.add(
+            "running"
+        );
 
-        animationFrame =
-            requestAnimationFrame(
-                simulationLoop
-            );
+
+        runSimulationTick();
     }
 );
 
+
+/* ============================================================
+   PAUSE
+============================================================ */
 
 pauseButton.addEventListener(
     "click",
@@ -1750,26 +1864,40 @@ pauseButton.addEventListener(
 
         running = false;
 
-        startButton.disabled = false;
-        pauseButton.disabled = true;
-
-        simulationStatus.textContent =
-            "Paused";
-
 
         if (
-            animationFrame !== null
+            simulationTimer
         ) {
 
-            cancelAnimationFrame(
-                animationFrame
+            clearTimeout(
+                simulationTimer
             );
 
-            animationFrame = null;
+            simulationTimer =
+                null;
         }
+
+
+        runButton.disabled =
+            false;
+
+        pauseButton.disabled =
+            true;
+
+
+        status.textContent =
+            "Paused";
+
+        status.classList.remove(
+            "running"
+        );
     }
 );
 
+
+/* ============================================================
+   RESET
+============================================================ */
 
 resetButton.addEventListener(
     "click",
@@ -1779,26 +1907,36 @@ resetButton.addEventListener(
 
 
         if (
-            animationFrame !== null
+            simulationTimer
         ) {
 
-            cancelAnimationFrame(
-                animationFrame
+            clearTimeout(
+                simulationTimer
             );
 
-            animationFrame = null;
+            simulationTimer =
+                null;
         }
 
 
-        baseline.reset();
-        hybrid.reset();
+        baselineModel.reset();
+
+        hybridModel.reset();
 
 
-        startButton.disabled = false;
-        pauseButton.disabled = true;
+        runButton.disabled =
+            false;
 
-        simulationStatus.textContent =
+        pauseButton.disabled =
+            true;
+
+
+        status.textContent =
             "Ready";
+
+        status.classList.remove(
+            "running"
+        );
 
 
         render();
@@ -1823,13 +1961,13 @@ mSlider.addEventListener(
 );
 
 
-lrSlider.addEventListener(
+alphaSlider.addEventListener(
     "input",
     () => {
 
-        lrValue.textContent =
+        alphaValue.textContent =
             Number(
-                lrSlider.value
+                alphaSlider.value
             )
             .toFixed(2);
     }
@@ -1861,31 +1999,7 @@ speedSlider.addEventListener(
 
 
 /* ============================================================
-   WINDOW RESIZE
-============================================================ */
-
-window.addEventListener(
-    "resize",
-    () => {
-
-        drawChart(
-            baselineChart,
-            baseline.history,
-            BASELINE_COLOUR
-        );
-
-
-        drawChart(
-            hybridChart,
-            hybrid.history,
-            HYBRID_COLOUR
-        );
-    }
-);
-
-
-/* ============================================================
-   INITIAL RENDER
+   INITIAL DISPLAY
 ============================================================ */
 
 render();
