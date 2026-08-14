@@ -1,23 +1,62 @@
 "use strict";
 
+
 /* ============================================================
-   MODEL SETTINGS
+   PRIMARY DISSERTATION CONFIGURATION
 ============================================================ */
 
 const N_AGENTS = 20;
-const ROUNDS_PER_ITERATION = 20;
+const ROUNDS = 20;
+
+const ALPHA = 0.05;
+const TAU = 1.0;
 const GAMMA = 1.0;
 
-const BASELINE = "#c06082";
-const BASELINE_DARK = "#994662";
-
-const HYBRID = "#7b6fd6";
-const HYBRID_DARK = "#594db4";
+const TRAINING_HORIZON = 100000;
+const N_SIM = 10;
 
 
-// Prisoner's Dilemma
-// 0 = cooperate
-// 1 = defect
+/*
+    These are the exact reported means from the
+    dissertation primary assortativity experiment.
+*/
+
+const DISSERTATION_RESULTS = {
+
+    "0.0": {
+        baseline: 0.258,
+        hybrid: 0.766
+    },
+
+    "0.3": {
+        baseline: 0.076,
+        hybrid: 0.788
+    },
+
+    "0.5": {
+        baseline: 0.064,
+        hybrid: 0.715
+    },
+
+    "0.7": {
+        baseline: 0.052,
+        hybrid: 0.717
+    },
+
+    "1.0": {
+        baseline: 0.039,
+        hybrid: 0.716
+    }
+
+};
+
+
+/*
+    PD payoff matrices from the authoritative code.
+
+    action 0 = cooperate
+    action 1 = defect
+*/
 
 const REWARD_1 = [
     [3, 0],
@@ -31,7 +70,7 @@ const REWARD_2 = [
 
 
 /* ============================================================
-   RANDOM NUMBER GENERATOR
+   RANDOMNESS
 ============================================================ */
 
 function seededRandom(seed) {
@@ -39,64 +78,102 @@ function seededRandom(seed) {
     return function () {
 
         seed |= 0;
-        seed = (seed + 0x6D2B79F5) | 0;
+
+        seed =
+            (
+                seed +
+                0x6D2B79F5
+            )
+            | 0;
 
         let t = seed;
 
-        t = Math.imul(
-            t ^ (t >>> 15),
-            t | 1
-        );
+        t =
+            Math.imul(
+                t ^ (t >>> 15),
+                t | 1
+            );
 
-        t ^= t + Math.imul(
-            t ^ (t >>> 7),
-            t | 61
-        );
+        t ^=
+            t +
+            Math.imul(
+                t ^ (t >>> 7),
+                t | 61
+            );
 
         return (
-            (t ^ (t >>> 14)) >>> 0
-        ) / 4294967296;
+            (
+                t ^
+                (t >>> 14)
+            )
+            >>> 0
+        )
+        /
+        4294967296;
     };
 }
 
 
 /* ============================================================
-   BASIC HELPERS
+   HELPERS
 ============================================================ */
 
 function stateToIndex(state) {
 
-    if (state === 0) return 0;
-    if (state === 1) return 1;
-    if (state === 100) return 2;
+    if (state === 0) {
+        return 0;
+    }
+
+    if (state === 1) {
+        return 1;
+    }
+
+    if (state === 100) {
+        return 2;
+    }
 
     return 3;
 }
 
 
-function shuffle(array, rng) {
+function shuffle(values, rng) {
 
-    const result = array.slice();
+    const output =
+        values.slice();
 
-    for (let i = result.length - 1; i > 0; i--) {
+    for (
+        let i =
+            output.length - 1;
+        i > 0;
+        i--
+    ) {
 
-        const j = Math.floor(
-            rng() * (i + 1)
-        );
+        const j =
+            Math.floor(
+                rng() *
+                (i + 1)
+            );
 
-        const temp = result[i];
+        const temp =
+            output[i];
 
-        result[i] = result[j];
-        result[j] = temp;
+        output[i] =
+            output[j];
+
+        output[j] =
+            temp;
     }
 
-    return result;
+    return output;
 }
 
 
 function formatPercent(value) {
 
-    return (value * 100).toFixed(1) + "%";
+    return (
+        value *
+        100
+    ).toFixed(1) + "%";
 }
 
 
@@ -107,88 +184,150 @@ function formatPercent(value) {
 function createQTable() {
 
     return Array.from(
-        { length: N_AGENTS },
+
+        {
+            length: N_AGENTS
+        },
+
         () =>
+
             Array.from(
-                { length: 4 },
-                () => [0, 0]
+
+                {
+                    length: 4
+                },
+
+                () => [
+                    0,
+                    0
+                ]
+
             )
+
     );
 }
 
 
 /* ============================================================
-   ACTION SELECTION
+   BOLTZMANN ACTION SELECTION
 
-   Mirrors the supplied dissertation implementation:
-       exp(tau * Q)
+   Matches supplied implementation:
+
+       q0 = tau * Q
+       q1 = tau * Q
+
 ============================================================ */
 
 function selectAction(
     Q,
     agent,
     state,
-    tau,
     rng
 ) {
 
-    const si = stateToIndex(state);
+    const si =
+        stateToIndex(state);
+
 
     const q0 =
-        tau * Q[agent][si][0];
+        TAU *
+        Q[agent][si][0];
+
 
     const q1 =
-        tau * Q[agent][si][1];
+        TAU *
+        Q[agent][si][1];
 
-    const maxQ = Math.max(q0, q1);
+
+    const maxQ =
+        Math.max(
+            q0,
+            q1
+        );
+
 
     const e0 =
-        Math.exp(q0 - maxQ);
+        Math.exp(
+            q0 -
+            maxQ
+        );
+
 
     const e1 =
-        Math.exp(q1 - maxQ);
+        Math.exp(
+            q1 -
+            maxQ
+        );
+
 
     const p0 =
-        e0 / (e0 + e1);
+        e0 /
+        (
+            e0 +
+            e1
+        );
 
-    return rng() < p0 ? 0 : 1;
+
+    return (
+        rng() <
+        p0
+    )
+        ?
+        0
+        :
+        1;
 }
 
 
 /* ============================================================
-   RANDOM PAIRING
+   PAIRING
 ============================================================ */
 
-function randomPairsFromIds(ids, rng) {
+function randomPairsFromIds(
+    ids,
+    rng
+) {
 
-    const ordered =
-        shuffle(ids, rng);
+    const shuffled =
+        shuffle(
+            ids,
+            rng
+        );
+
 
     const pairs = [];
 
+
     for (
         let i = 0;
-        i + 1 < ordered.length;
+        i + 1 <
+        shuffled.length;
         i += 2
     ) {
 
-        pairs.push([
-            ordered[i],
-            ordered[i + 1]
-        ]);
+        pairs.push(
+            [
+                shuffled[i],
+                shuffled[i + 1]
+            ]
+        );
     }
+
 
     return pairs;
 }
 
 
-function randomPairs(count, rng) {
+function randomPairs(rng) {
 
     const ids =
         Array.from(
-            { length: count },
+            {
+                length: N_AGENTS
+            },
             (_, i) => i
         );
+
 
     return randomPairsFromIds(
         ids,
@@ -197,12 +336,12 @@ function randomPairs(count, rng) {
 }
 
 
-/* ============================================================
-   ASSORTATIVE PAIRING
-
-   Previous cooperators preferentially pair together.
-   Previous defectors preferentially pair together.
-============================================================ */
+/*
+    Behavioural assortativity:
+    previous C with previous C,
+    previous D with previous D,
+    wherever possible.
+*/
 
 function assortativePairs(
     ids,
@@ -210,67 +349,118 @@ function assortativePairs(
     rng
 ) {
 
-    const cooperators = [];
-    const defectors = [];
+    const C = [];
+    const D = [];
 
-    for (const id of ids) {
 
-        if (actionsPD[id] === 0) {
-            cooperators.push(id);
+    for (
+        const agent of ids
+    ) {
+
+        if (
+            actionsPD[agent]
+            ===
+            0
+        ) {
+
+            C.push(agent);
+
         } else {
-            defectors.push(id);
+
+            D.push(agent);
         }
     }
 
 
-    const C = shuffle(cooperators, rng);
-    const D = shuffle(defectors, rng);
+    const cooperators =
+        shuffle(
+            C,
+            rng
+        );
+
+
+    const defectors =
+        shuffle(
+            D,
+            rng
+        );
+
 
     const pairs = [];
+
     const leftovers = [];
 
 
-    let i = 0;
-
-    while (i + 1 < C.length) {
-
-        pairs.push([
-            C[i],
-            C[i + 1]
-        ]);
-
-        i += 2;
-    }
-
-    if (i < C.length) {
-        leftovers.push(C[i]);
-    }
+    let index = 0;
 
 
-    i = 0;
+    while (
+        index + 1 <
+        cooperators.length
+    ) {
 
-    while (i + 1 < D.length) {
+        pairs.push(
+            [
+                cooperators[index],
+                cooperators[index + 1]
+            ]
+        );
 
-        pairs.push([
-            D[i],
-            D[i + 1]
-        ]);
-
-        i += 2;
-    }
-
-    if (i < D.length) {
-        leftovers.push(D[i]);
+        index += 2;
     }
 
 
-    if (leftovers.length >= 2) {
+    if (
+        index <
+        cooperators.length
+    ) {
 
-        pairs.push([
-            leftovers[0],
-            leftovers[1]
-        ]);
+        leftovers.push(
+            cooperators[index]
+        );
     }
+
+
+    index = 0;
+
+
+    while (
+        index + 1 <
+        defectors.length
+    ) {
+
+        pairs.push(
+            [
+                defectors[index],
+                defectors[index + 1]
+            ]
+        );
+
+        index += 2;
+    }
+
+
+    if (
+        index <
+        defectors.length
+    ) {
+
+        leftovers.push(
+            defectors[index]
+        );
+    }
+
+
+    const extra =
+        randomPairsFromIds(
+            leftovers,
+            rng
+        );
+
+
+    pairs.push(
+        ...extra
+    );
 
 
     return pairs;
@@ -284,7 +474,9 @@ function assortativePairs(
 function createMemory() {
 
     return Array.from(
-        { length: N_AGENTS },
+        {
+            length: N_AGENTS
+        },
         () => []
     );
 }
@@ -298,39 +490,42 @@ function storeExperience(
     reward
 ) {
 
-    memory[agent].push({
-        state: state,
-        action: action,
-        reward: reward
-    });
+    memory[agent].push(
+        {
+            state,
+            action,
+            reward
+        }
+    );
 }
 
 
 /* ============================================================
    Q UPDATE
-
-   Same backward-return update as Python code.
 ============================================================ */
 
-function updateQValues(
+function updateQ(
     Q,
-    memory,
-    learningRate
+    memory
 ) {
 
     for (
         let agent = 0;
-        agent < N_AGENTS;
+        agent <
+        N_AGENTS;
         agent++
     ) {
 
         let running = 0;
 
+
         const experiences =
             memory[agent];
 
+
         for (
-            let k = experiences.length - 1;
+            let k =
+                experiences.length - 1;
             k >= 0;
             k--
         ) {
@@ -338,22 +533,35 @@ function updateQValues(
             const e =
                 experiences[k];
 
+
             running =
-                e.reward +
-                GAMMA * running;
+                e.reward
+                +
+                GAMMA
+                *
+                running;
+
 
             const si =
-                stateToIndex(e.state);
+                stateToIndex(
+                    e.state
+                );
 
-            Q[agent][si][e.action] =
-                (1 - learningRate)
+
+            Q[agent][si][e.action]
+                =
+                (
+                    1 -
+                    ALPHA
+                )
                 *
                 Q[agent][si][e.action]
                 +
-                learningRate
+                ALPHA
                 *
                 running;
         }
+
 
         memory[agent] = [];
     }
@@ -368,7 +576,8 @@ class Model {
 
     constructor(type) {
 
-        this.type = type;
+        this.type =
+            type;
 
         this.reset();
     }
@@ -377,86 +586,107 @@ class Model {
     reset() {
 
         this.rng =
-            seededRandom(1235);
+            seededRandom(
+                this.type === "baseline"
+                ?
+                1235
+                :
+                1235
+            );
+
 
         this.Q =
             createQTable();
 
+
         this.memory =
             createMemory();
 
+
+        /*
+            Match the model's binary
+            initial PD action state.
+        */
+
         this.actionsPD =
             Array.from(
-                { length: N_AGENTS },
+
+                {
+                    length:
+                        N_AGENTS
+                },
+
                 () =>
-                    this.rng() < 0.5
-                    ? 0
-                    : 1
+                    this.rng() <
+                    0.5
+                    ?
+                    0
+                    :
+                    1
+
             );
+
 
         this.groups =
             randomPairs(
-                N_AGENTS,
                 this.rng
             );
 
-        this.iteration = 0;
 
-        this.cooperation = 0;
+        this.iteration =
+            0;
 
-        this.switchRate =
-            this.type === "baseline"
-            ? 1
-            : 0;
+
+        this.cooperation =
+            0;
+
 
         this.positions =
             Array.from(
-                { length: N_AGENTS },
+                {
+                    length:
+                        N_AGENTS
+                },
                 () => ({
-                    x: 0.5,
-                    y: 0.5
+                    left: 50,
+                    top: 50
                 })
             );
+
 
         this.targets =
             Array.from(
-                { length: N_AGENTS },
+                {
+                    length:
+                        N_AGENTS
+                },
                 () => ({
-                    x: 0.5,
-                    y: 0.5
+                    left: 50,
+                    top: 50
                 })
             );
 
-        assignPairTargets(this);
 
-        for (
-            let i = 0;
-            i < N_AGENTS;
-            i++
-        ) {
-
-            this.positions[i].x =
-                this.targets[i].x;
-
-            this.positions[i].y =
-                this.targets[i].y;
-        }
+        assignTargets(this);
     }
 
-
-    /* ========================================================
-       BASELINE REMATCHING
-    ======================================================== */
 
     baselineRematch(m) {
 
         const ids =
             Array.from(
-                { length: N_AGENTS },
+                {
+                    length:
+                        N_AGENTS
+                },
                 (_, i) => i
             );
 
-        if (this.rng() < m) {
+
+        if (
+            this.rng() <
+            m
+        ) {
 
             this.groups =
                 assortativePairs(
@@ -476,22 +706,23 @@ class Model {
     }
 
 
-    /* ========================================================
-       HYBRID PARTNER RETENTION
-    ======================================================== */
+    hybridRematch(m) {
 
-    hybridRematch(m, tau) {
+        const stayPairs = [];
 
-        const stayingPairs = [];
-        const switchingAgents = [];
-
-        let switchCount = 0;
+        const switchPool = [];
 
 
-        for (const pair of this.groups) {
+        for (
+            const pair of
+            this.groups
+        ) {
 
-            const i = pair[0];
-            const j = pair[1];
+            const i =
+                pair[0];
+
+            const j =
+                pair[1];
 
 
             const stateI =
@@ -506,19 +737,23 @@ class Model {
                     this.Q,
                     i,
                     stateI,
-                    tau,
                     this.rng
                 );
+
 
             const actionJ =
                 selectAction(
                     this.Q,
                     j,
                     stateJ,
-                    tau,
                     this.rng
                 );
 
+
+            /*
+                Relationship decision
+                has zero immediate reward.
+            */
 
             storeExperience(
                 this.memory,
@@ -527,6 +762,7 @@ class Model {
                 actionI,
                 0
             );
+
 
             storeExperience(
                 this.memory,
@@ -537,51 +773,57 @@ class Model {
             );
 
 
-            switchCount +=
-                actionI + actionJ;
-
-
             /*
-                Both must choose stay.
+                Relationship remains only
+                when both choose stay.
             */
 
             if (
-                actionI === 0 &&
+                actionI === 0
+                &&
                 actionJ === 0
             ) {
 
-                stayingPairs.push([
-                    i,
-                    j
-                ]);
+                stayPairs.push(
+                    [
+                        i,
+                        j
+                    ]
+                );
 
             } else {
 
-                switchingAgents.push(i);
-                switchingAgents.push(j);
+                switchPool.push(i);
+                switchPool.push(j);
             }
         }
 
 
-        let rematched = [];
+        let newPairs = [];
 
 
-        if (switchingAgents.length > 0) {
+        if (
+            switchPool.length >
+            0
+        ) {
 
-            if (this.rng() < m) {
+            if (
+                this.rng() <
+                m
+            ) {
 
-                rematched =
+                newPairs =
                     assortativePairs(
-                        switchingAgents,
+                        switchPool,
                         this.actionsPD,
                         this.rng
                     );
 
             } else {
 
-                rematched =
+                newPairs =
                     randomPairsFromIds(
-                        switchingAgents,
+                        switchPool,
                         this.rng
                     );
             }
@@ -589,273 +831,270 @@ class Model {
 
 
         this.groups = [
-            ...stayingPairs,
-            ...rematched
+            ...stayPairs,
+            ...newPairs
         ];
-
-
-        return (
-            switchCount /
-            N_AGENTS
-        );
     }
 
 
-    /* ========================================================
-       ONE ITERATION
-    ======================================================== */
-
-    step(
-        m,
-        learningRate,
-        tau
-    ) {
+    step(m) {
 
         let CC = 0;
         let CD = 0;
         let DC = 0;
         let DD = 0;
 
-        let switchSum = 0;
-
 
         for (
             let round = 0;
-            round < ROUNDS_PER_ITERATION;
+            round < ROUNDS;
             round++
         ) {
 
-            /*
-                Relationship stage
-            */
-
-            if (this.type === "baseline") {
+            if (
+                this.type
+                ===
+                "baseline"
+            ) {
 
                 this.baselineRematch(m);
 
-                switchSum += 1;
-
             } else {
 
-                switchSum +=
-                    this.hybridRematch(
-                        m,
-                        tau
-                    );
+                this.hybridRematch(m);
             }
 
 
-            /*
-                PD interaction
-            */
+            for (
+                const pair of
+                this.groups
+            ) {
 
-            for (const pair of this.groups) {
+                const i =
+                    pair[0];
 
-                const a = pair[0];
-                const b = pair[1];
-
-
-                const previousA =
-                    this.actionsPD[a];
-
-                const previousB =
-                    this.actionsPD[b];
+                const j =
+                    pair[1];
 
 
-                const stateA =
-                    100 + previousB;
+                const previousI =
+                    this.actionsPD[i];
 
-                const stateB =
-                    100 + previousA;
+                const previousJ =
+                    this.actionsPD[j];
 
 
-                const actionA =
+                const stateI =
+                    100
+                    +
+                    previousJ;
+
+
+                const stateJ =
+                    100
+                    +
+                    previousI;
+
+
+                const actionI =
                     selectAction(
                         this.Q,
-                        a,
-                        stateA,
-                        tau,
+                        i,
+                        stateI,
                         this.rng
                     );
 
-                const actionB =
+
+                const actionJ =
                     selectAction(
                         this.Q,
-                        b,
-                        stateB,
-                        tau,
+                        j,
+                        stateJ,
                         this.rng
                     );
 
 
-                const rewardA =
+                const rewardI =
                     REWARD_1
-                    [actionA]
-                    [actionB];
+                    [actionI]
+                    [actionJ];
 
-                const rewardB =
+
+                const rewardJ =
                     REWARD_2
-                    [actionA]
-                    [actionB];
+                    [actionI]
+                    [actionJ];
 
 
                 storeExperience(
                     this.memory,
-                    a,
-                    stateA,
-                    actionA,
-                    rewardA
+                    i,
+                    stateI,
+                    actionI,
+                    rewardI
                 );
 
+
                 storeExperience(
                     this.memory,
-                    b,
-                    stateB,
-                    actionB,
-                    rewardB
+                    j,
+                    stateJ,
+                    actionJ,
+                    rewardJ
                 );
 
 
                 if (
-                    actionA === 0 &&
-                    actionB === 0
+                    actionI === 0
+                    &&
+                    actionJ === 0
                 ) {
 
                     CC++;
 
-                } else if (
-                    actionA === 0 &&
-                    actionB === 1
+                }
+
+                else if (
+                    actionI === 0
+                    &&
+                    actionJ === 1
                 ) {
 
                     CD++;
 
-                } else if (
-                    actionA === 1 &&
-                    actionB === 0
+                }
+
+                else if (
+                    actionI === 1
+                    &&
+                    actionJ === 0
                 ) {
 
                     DC++;
 
-                } else {
+                }
+
+                else {
 
                     DD++;
                 }
 
 
-                this.actionsPD[a] =
-                    actionA;
+                this.actionsPD[i] =
+                    actionI;
 
-                this.actionsPD[b] =
-                    actionB;
+                this.actionsPD[j] =
+                    actionJ;
             }
         }
 
 
-        updateQValues(
+        updateQ(
             this.Q,
-            this.memory,
-            learningRate
+            this.memory
         );
 
 
-        const games =
-            CC + CD + DC + DD;
+        const outcomes =
+            CC
+            +
+            CD
+            +
+            DC
+            +
+            DD;
 
 
-        if (games > 0) {
-
-            this.cooperation =
-                (
-                    2 * CC +
-                    CD +
-                    DC
-                )
-                /
-                (
-                    2 * games
-                );
-
-        } else {
-
-            this.cooperation = 0;
-        }
-
-
-        this.switchRate =
-            switchSum /
-            ROUNDS_PER_ITERATION;
+        this.cooperation =
+            (
+                2 * CC
+                +
+                CD
+                +
+                DC
+            )
+            /
+            (
+                2 *
+                outcomes
+            );
 
 
         this.iteration++;
 
 
-        assignPairTargets(this);
-    }
-
-
-    cooperatorCount() {
-
-        let count = 0;
-
-        for (
-            const action of
-            this.actionsPD
-        ) {
-
-            if (action === 0) {
-                count++;
-            }
-        }
-
-        return count;
+        assignTargets(
+            this
+        );
     }
 }
 
 
 /* ============================================================
-   VISUAL PAIR POSITIONS
+   VISUAL POSITIONS
 ============================================================ */
 
-function assignPairTargets(model) {
+const SLOTS = [
 
-    const slots = [
+    [25, 14],
+    [75, 14],
 
-        { x: 0.25, y: 0.16 },
-        { x: 0.75, y: 0.16 },
+    [25, 31],
+    [75, 31],
 
-        { x: 0.25, y: 0.33 },
-        { x: 0.75, y: 0.33 },
+    [25, 48],
+    [75, 48],
 
-        { x: 0.25, y: 0.50 },
-        { x: 0.75, y: 0.50 },
+    [25, 65],
+    [75, 65],
 
-        { x: 0.25, y: 0.67 },
-        { x: 0.75, y: 0.67 },
+    [25, 82],
+    [75, 82]
 
-        { x: 0.25, y: 0.84 },
-        { x: 0.75, y: 0.84 }
+];
 
-    ];
 
+function assignTargets(model) {
 
     model.groups.forEach(
         (pair, index) => {
 
             const slot =
-                slots[index];
-
-            if (!slot) return;
+                SLOTS[index];
 
 
-            model.targets[pair[0]] = {
-                x: slot.x - 0.06,
-                y: slot.y
+            if (!slot) {
+                return;
+            }
+
+
+            model.targets[
+                pair[0]
+            ] = {
+
+                left:
+                    slot[0]
+                    -
+                    5.5,
+
+                top:
+                    slot[1]
+
             };
 
-            model.targets[pair[1]] = {
-                x: slot.x + 0.06,
-                y: slot.y
+
+            model.targets[
+                pair[1]
+            ] = {
+
+                left:
+                    slot[0]
+                    +
+                    5.5,
+
+                top:
+                    slot[1]
+
             };
         }
     );
@@ -863,162 +1102,77 @@ function assignPairTargets(model) {
 
 
 /* ============================================================
-   CANVAS RESIZING
+   DOM CREATION
 ============================================================ */
 
-function resizeCanvas(canvas) {
-
-    const rect =
-        canvas.getBoundingClientRect();
-
-    const ratio =
-        window.devicePixelRatio || 1;
-
-
-    canvas.width =
-        Math.max(
-            1,
-            Math.floor(
-                rect.width * ratio
-            )
-        );
-
-    canvas.height =
-        Math.max(
-            1,
-            Math.floor(
-                rect.height * ratio
-            )
-        );
-
-
-    const ctx =
-        canvas.getContext("2d");
-
-
-    ctx.setTransform(
-        ratio,
-        0,
-        0,
-        ratio,
-        0,
-        0
-    );
-
-
-    return {
-        ctx,
-        width: rect.width,
-        height: rect.height
-    };
-}
-
-
-/* ============================================================
-   MANUAL ROUNDED RECTANGLE
-
-   Avoids ctx.roundRect browser compatibility problems.
-============================================================ */
-
-function drawRoundedRect(
-    ctx,
-    x,
-    y,
-    width,
-    height,
-    radius
+function createAgentElements(
+    model,
+    container,
+    type
 ) {
 
-    const r =
-        Math.min(
-            radius,
-            width / 2,
-            height / 2
-        );
+    container.innerHTML =
+        "";
 
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        x + r,
-        y
-    );
-
-    ctx.lineTo(
-        x + width - r,
-        y
-    );
-
-    ctx.quadraticCurveTo(
-        x + width,
-        y,
-        x + width,
-        y + r
-    );
-
-    ctx.lineTo(
-        x + width,
-        y + height - r
-    );
-
-    ctx.quadraticCurveTo(
-        x + width,
-        y + height,
-        x + width - r,
-        y + height
-    );
-
-    ctx.lineTo(
-        x + r,
-        y + height
-    );
-
-    ctx.quadraticCurveTo(
-        x,
-        y + height,
-        x,
-        y + height - r
-    );
-
-    ctx.lineTo(
-        x,
-        y + r
-    );
-
-    ctx.quadraticCurveTo(
-        x,
-        y,
-        x + r,
-        y
-    );
-
-    ctx.closePath();
-}
-
-
-/* ============================================================
-   POSITION ANIMATION
-============================================================ */
-
-function animatePositions(model) {
 
     for (
         let i = 0;
-        i < N_AGENTS;
+        i <
+        N_AGENTS;
         i++
     ) {
 
-        model.positions[i].x +=
-            (
-                model.targets[i].x -
-                model.positions[i].x
-            ) * 0.12;
+        const agent =
+            document.createElement(
+                "div"
+            );
 
-        model.positions[i].y +=
-            (
-                model.targets[i].y -
-                model.positions[i].y
-            ) * 0.12;
+
+        agent.className =
+            `agent ${type}`;
+
+
+        agent.dataset.agent =
+            i;
+
+
+        const action =
+            document.createElement(
+                "span"
+            );
+
+
+        action.className =
+            "agent-action";
+
+
+        const number =
+            document.createElement(
+                "span"
+            );
+
+
+        number.className =
+            "agent-number";
+
+
+        number.textContent =
+            i + 1;
+
+
+        agent.appendChild(
+            action
+        );
+
+
+        agent.appendChild(
+            number
+        );
+
+
+        container.appendChild(
+            agent
+        );
     }
 }
 
@@ -1028,427 +1182,400 @@ function animatePositions(model) {
 ============================================================ */
 
 function drawModel(
-    canvas,
     model,
-    colour,
-    darkColour
+    agentLayer,
+    lineLayer,
+    colour
 ) {
 
-    const size =
-        resizeCanvas(canvas);
-
-    const ctx =
-        size.ctx;
-
-    const width =
-        size.width;
-
-    const height =
-        size.height;
+    const agents =
+        agentLayer.querySelectorAll(
+            ".agent"
+        );
 
 
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
+    agents.forEach(
+        (element, index) => {
+
+            const target =
+                model.targets[index];
+
+
+            element.style.left =
+                target.left +
+                "%";
+
+
+            element.style.top =
+                target.top +
+                "%";
+
+
+            const cooperation =
+                model.actionsPD[index]
+                ===
+                0;
+
+
+            element.classList.toggle(
+                "cooperate",
+                cooperation
+            );
+
+
+            element.classList.toggle(
+                "defect",
+                !cooperation
+            );
+
+
+            element
+                .querySelector(
+                    ".agent-action"
+                )
+                .textContent =
+                    cooperation
+                    ?
+                    "C"
+                    :
+                    "D";
+        }
     );
 
 
-    animatePositions(model);
+    lineLayer.innerHTML =
+        "";
 
 
-    /*
-        10 partnership slots
-    */
-
-    const slotYs = [
-        0.16,
-        0.33,
-        0.50,
-        0.67,
-        0.84
-    ];
+    const rect =
+        lineLayer
+            .getBoundingClientRect();
 
 
-    ctx.lineWidth = 1;
-
-    ctx.strokeStyle =
-        "rgba(70, 65, 80, 0.09)";
-
-
-    for (const y of slotYs) {
-
-        for (const x of [0.25, 0.75]) {
-
-            const boxWidth =
-                width * 0.34;
-
-            const boxHeight =
-                62;
-
-            const bx =
-                x * width -
-                boxWidth / 2;
-
-            const by =
-                y * height -
-                boxHeight / 2;
+    lineLayer.setAttribute(
+        "viewBox",
+        `0 0 ${rect.width} ${rect.height}`
+    );
 
 
-            drawRoundedRect(
-                ctx,
-                bx,
-                by,
-                boxWidth,
-                boxHeight,
-                12
-            );
+    for (
+        const pair of
+        model.groups
+    ) {
 
-            ctx.stroke();
-        }
-    }
-
-
-    /*
-        Partnership lines
-    */
-
-    for (const pair of model.groups) {
-
-        const p1 =
-            model.positions[
+        const a =
+            model.targets[
                 pair[0]
             ];
 
-        const p2 =
-            model.positions[
+
+        const b =
+            model.targets[
                 pair[1]
             ];
 
 
-        ctx.beginPath();
-
-        ctx.moveTo(
-            p1.x * width,
-            p1.y * height
-        );
-
-        ctx.lineTo(
-            p2.x * width,
-            p2.y * height
-        );
-
-        ctx.strokeStyle =
-            colour;
-
-        ctx.globalAlpha =
-            0.55;
-
-        ctx.lineWidth =
-            4;
-
-        ctx.stroke();
-
-        ctx.globalAlpha =
-            1;
-    }
+        const line =
+            document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "line"
+            );
 
 
-    /*
-        Draw 20 agents
-    */
-
-    for (
-        let agent = 0;
-        agent < N_AGENTS;
-        agent++
-    ) {
-
-        const position =
-            model.positions[agent];
-
-
-        const x =
-            position.x * width;
-
-        const y =
-            position.y * height;
-
-
-        const cooperating =
-            model.actionsPD[agent] === 0;
-
-
-        /*
-            Shadow
-        */
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x,
-            y + 3,
-            22,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fillStyle =
-            "rgba(30, 25, 40, 0.10)";
-
-        ctx.fill();
-
-
-        /*
-            Agent node
-        */
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x,
-            y,
-            21,
-            0,
-            Math.PI * 2
+        line.setAttribute(
+            "x1",
+            rect.width *
+            a.left /
+            100
         );
 
 
-        ctx.fillStyle =
-            cooperating
-            ? colour
-            : "#ffffff";
-
-        ctx.fill();
-
-
-        ctx.strokeStyle =
-            darkColour;
-
-        ctx.lineWidth =
-            3;
-
-        ctx.stroke();
-
-
-        /*
-            C / D
-        */
-
-        ctx.fillStyle =
-            cooperating
-            ? "#ffffff"
-            : darkColour;
-
-        ctx.font =
-            "bold 13px Arial";
-
-        ctx.textAlign =
-            "center";
-
-        ctx.textBaseline =
-            "middle";
-
-        ctx.fillText(
-            cooperating
-            ? "C"
-            : "D",
-            x,
-            y
+        line.setAttribute(
+            "y1",
+            rect.height *
+            a.top /
+            100
         );
 
 
-        /*
-            Agent number
-        */
+        line.setAttribute(
+            "x2",
+            rect.width *
+            b.left /
+            100
+        );
 
-        ctx.fillStyle =
-            "#8f8b96";
 
-        ctx.font =
-            "10px Arial";
+        line.setAttribute(
+            "y2",
+            rect.height *
+            b.top /
+            100
+        );
 
-        ctx.fillText(
-            String(agent + 1),
-            x,
-            y + 35
+
+        line.setAttribute(
+            "stroke",
+            colour
+        );
+
+
+        line.setAttribute(
+            "stroke-width",
+            "4"
+        );
+
+
+        line.setAttribute(
+            "stroke-opacity",
+            "0.55"
+        );
+
+
+        lineLayer.appendChild(
+            line
         );
     }
 }
 
 
 /* ============================================================
-   CREATE MODELS
+   MODELS + ELEMENTS
 ============================================================ */
 
-const baselineModel =
-    new Model("baseline");
+const baseline =
+    new Model(
+        "baseline"
+    );
 
-const hybridModel =
-    new Model("hybrid");
+
+const hybrid =
+    new Model(
+        "hybrid"
+    );
+
+
+const baselineAgents =
+    document.getElementById(
+        "baselineAgents"
+    );
+
+
+const hybridAgents =
+    document.getElementById(
+        "hybridAgents"
+    );
+
+
+const baselineLines =
+    document.getElementById(
+        "baselineLines"
+    );
+
+
+const hybridLines =
+    document.getElementById(
+        "hybridLines"
+    );
+
+
+createAgentElements(
+    baseline,
+    baselineAgents,
+    "baseline"
+);
+
+
+createAgentElements(
+    hybrid,
+    hybridAgents,
+    "hybrid"
+);
 
 
 /* ============================================================
-   DOM ELEMENTS
+   SELECTED M
 ============================================================ */
 
-const baselineCanvas =
-    document.getElementById(
-        "baselineCanvas"
-    );
-
-const hybridCanvas =
-    document.getElementById(
-        "hybridCanvas"
-    );
-
-
-const mSlider =
-    document.getElementById(
-        "mSlider"
-    );
-
-const alphaSlider =
-    document.getElementById(
-        "alphaSlider"
-    );
-
-const tauSlider =
-    document.getElementById(
-        "tauSlider"
-    );
-
-const speedSlider =
-    document.getElementById(
-        "speedSlider"
-    );
-
-
-const mValue =
-    document.getElementById(
-        "mValue"
-    );
-
-const alphaValue =
-    document.getElementById(
-        "alphaValue"
-    );
-
-const tauValue =
-    document.getElementById(
-        "tauValue"
-    );
-
-const speedValue =
-    document.getElementById(
-        "speedValue"
-    );
-
-
-const runButton =
-    document.getElementById(
-        "runButton"
-    );
-
-const pauseButton =
-    document.getElementById(
-        "pauseButton"
-    );
-
-const resetButton =
-    document.getElementById(
-        "resetButton"
-    );
-
-const statusElement =
-    document.getElementById(
-        "status"
-    );
+let selectedM = 0.0;
 
 
 /* ============================================================
-   UPDATE TEXT
+   REPORTED RESULTS
+============================================================ */
+
+function resultKey(m) {
+
+    return Number(m)
+        .toFixed(1);
+}
+
+
+function updateReportedResults() {
+
+    const key =
+        resultKey(
+            selectedM
+        );
+
+
+    const values =
+        DISSERTATION_RESULTS[
+            key
+        ];
+
+
+    document
+        .getElementById(
+            "baselineReported"
+        )
+        .textContent =
+            formatPercent(
+                values.baseline
+            );
+
+
+    document
+        .getElementById(
+            "hybridReported"
+        )
+        .textContent =
+            formatPercent(
+                values.hybrid
+            );
+
+
+    document
+        .getElementById(
+            "baselineResult"
+        )
+        .textContent =
+            formatPercent(
+                values.baseline
+            );
+
+
+    document
+        .getElementById(
+            "hybridResult"
+        )
+        .textContent =
+            formatPercent(
+                values.hybrid
+            );
+
+
+    document
+        .getElementById(
+            "resultM"
+        )
+        .textContent =
+            key;
+
+
+    document
+        .getElementById(
+            "baselineBar"
+        )
+        .style.width =
+            (
+                values.baseline *
+                100
+            )
+            +
+            "%";
+
+
+    document
+        .getElementById(
+            "hybridBar"
+        )
+        .style.width =
+            (
+                values.hybrid *
+                100
+            )
+            +
+            "%";
+}
+
+
+/* ============================================================
+   METRICS
 ============================================================ */
 
 function updateMetrics() {
 
-    document.getElementById(
-        "baselineIteration"
-    ).textContent =
-        baselineModel.iteration;
+    document
+        .getElementById(
+            "baselineIteration"
+        )
+        .textContent =
+            baseline.iteration
+                .toLocaleString();
 
 
-    document.getElementById(
-        "hybridIteration"
-    ).textContent =
-        hybridModel.iteration;
+    document
+        .getElementById(
+            "hybridIteration"
+        )
+        .textContent =
+            hybrid.iteration
+                .toLocaleString();
 
 
-    document.getElementById(
-        "baselineCooperation"
-    ).textContent =
-        baselineModel.iteration === 0
-        ? "—"
-        : formatPercent(
-            baselineModel.cooperation
-        );
+    document
+        .getElementById(
+            "baselineLive"
+        )
+        .textContent =
+            baseline.iteration
+            ===
+            0
+            ?
+            "—"
+            :
+            formatPercent(
+                baseline.cooperation
+            );
 
 
-    document.getElementById(
-        "hybridCooperation"
-    ).textContent =
-        hybridModel.iteration === 0
-        ? "—"
-        : formatPercent(
-            hybridModel.cooperation
-        );
-
-
-    document.getElementById(
-        "baselineCooperators"
-    ).textContent =
-        baselineModel.cooperatorCount()
-        + " / 20";
-
-
-    document.getElementById(
-        "hybridCooperators"
-    ).textContent =
-        hybridModel.cooperatorCount()
-        + " / 20";
-
-
-    document.getElementById(
-        "hybridSwitching"
-    ).textContent =
-        hybridModel.iteration === 0
-        ? "—"
-        : formatPercent(
-            hybridModel.switchRate
-        );
+    document
+        .getElementById(
+            "hybridLive"
+        )
+        .textContent =
+            hybrid.iteration
+            ===
+            0
+            ?
+            "—"
+            :
+            formatPercent(
+                hybrid.cooperation
+            );
 }
 
 
 /* ============================================================
-   RENDER LOOP
+   RENDER
 ============================================================ */
 
 function render() {
 
     drawModel(
-        baselineCanvas,
-        baselineModel,
-        BASELINE,
-        BASELINE_DARK
+        baseline,
+        baselineAgents,
+        baselineLines,
+        "#c06082"
     );
 
 
     drawModel(
-        hybridCanvas,
-        hybridModel,
-        HYBRID,
-        HYBRID_DARK
+        hybrid,
+        hybridAgents,
+        hybridLines,
+        "#7b6fd6"
     );
 
 
@@ -1456,50 +1583,87 @@ function render() {
 }
 
 
-function visualLoop() {
+/* ============================================================
+   M BUTTONS
+============================================================ */
 
-    render();
+document
+    .querySelectorAll(
+        ".m-button"
+    )
+    .forEach(
+        button => {
 
-    window.requestAnimationFrame(
-        visualLoop
+            button.addEventListener(
+                "click",
+                () => {
+
+                    selectedM =
+                        Number(
+                            button.dataset.m
+                        );
+
+
+                    document
+                        .querySelectorAll(
+                            ".m-button"
+                        )
+                        .forEach(
+                            b =>
+                                b.classList
+                                    .remove(
+                                        "active"
+                                    )
+                        );
+
+
+                    button
+                        .classList
+                        .add(
+                            "active"
+                        );
+
+
+                    updateReportedResults();
+
+
+                    resetSimulation();
+                }
+            );
+        }
     );
-}
-
-
-window.requestAnimationFrame(
-    visualLoop
-);
 
 
 /* ============================================================
    SIMULATION LOOP
 ============================================================ */
 
-let running = false;
-let timer = null;
+let running =
+    false;
 
 
-function simulationTick() {
+let timer =
+    null;
+
+
+const speedSlider =
+    document.getElementById(
+        "speedSlider"
+    );
+
+
+const speedValue =
+    document.getElementById(
+        "speedValue"
+    );
+
+
+function tick() {
 
     if (!running) {
         return;
     }
 
-
-    const m =
-        Number(
-            mSlider.value
-        );
-
-    const alpha =
-        Number(
-            alphaSlider.value
-        );
-
-    const tau =
-        Number(
-            tauSlider.value
-        );
 
     const speed =
         Number(
@@ -1507,211 +1671,218 @@ function simulationTick() {
         );
 
 
-    const iterationsPerTick =
+    /*
+        Multiple actual model iterations
+        per visual update.
+    */
+
+    const steps =
         Math.max(
             1,
-            Math.ceil(
-                speed / 4
-            )
+            speed
         );
 
 
     for (
         let i = 0;
-        i <
-        iterationsPerTick;
+        i < steps;
         i++
     ) {
 
-        baselineModel.step(
-            m,
-            alpha,
-            tau
+        baseline.step(
+            selectedM
         );
 
-        hybridModel.step(
-            m,
-            alpha,
-            tau
+
+        hybrid.step(
+            selectedM
         );
     }
 
 
-    const delay =
-        Math.max(
-            80,
-            600 -
-            speed * 20
-        );
+    render();
 
 
     timer =
         window.setTimeout(
-            simulationTick,
-            delay
+            tick,
+            Math.max(
+                80,
+                600
+                -
+                speed * 48
+            )
         );
 }
 
 
 /* ============================================================
-   RUN
+   BUTTONS
 ============================================================ */
+
+const runButton =
+    document.getElementById(
+        "runButton"
+    );
+
+
+const pauseButton =
+    document.getElementById(
+        "pauseButton"
+    );
+
+
+const resetButton =
+    document.getElementById(
+        "resetButton"
+    );
+
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
 
 runButton.addEventListener(
     "click",
-    function () {
+    () => {
 
         if (running) {
             return;
         }
 
-        running = true;
+
+        running =
+            true;
+
 
         runButton.disabled =
             true;
+
 
         pauseButton.disabled =
             false;
 
 
-        statusElement.textContent =
+        status.textContent =
             "Running";
 
-        statusElement.classList.add(
+
+        status.classList.add(
             "running"
         );
 
 
-        simulationTick();
+        tick();
     }
 );
 
-
-/* ============================================================
-   PAUSE
-============================================================ */
 
 pauseButton.addEventListener(
     "click",
-    function () {
+    () => {
 
-        running = false;
+        running =
+            false;
 
 
-        if (timer !== null) {
+        if (
+            timer !== null
+        ) {
 
-            clearTimeout(timer);
+            clearTimeout(
+                timer
+            );
 
-            timer = null;
+
+            timer =
+                null;
         }
 
 
         runButton.disabled =
             false;
 
+
         pauseButton.disabled =
             true;
 
 
-        statusElement.textContent =
+        status.textContent =
             "Paused";
 
-        statusElement.classList.remove(
+
+        status.classList.remove(
             "running"
         );
     }
 );
 
 
-/* ============================================================
-   RESET
-============================================================ */
+function resetSimulation() {
+
+    running =
+        false;
+
+
+    if (
+        timer !== null
+    ) {
+
+        clearTimeout(
+            timer
+        );
+
+
+        timer =
+            null;
+    }
+
+
+    baseline.reset();
+
+    hybrid.reset();
+
+
+    runButton.disabled =
+        false;
+
+
+    pauseButton.disabled =
+        true;
+
+
+    status.textContent =
+        "Ready";
+
+
+    status.classList.remove(
+        "running"
+    );
+
+
+    render();
+}
+
 
 resetButton.addEventListener(
     "click",
-    function () {
-
-        running = false;
-
-
-        if (timer !== null) {
-
-            clearTimeout(timer);
-
-            timer = null;
-        }
-
-
-        baselineModel.reset();
-        hybridModel.reset();
-
-
-        runButton.disabled =
-            false;
-
-        pauseButton.disabled =
-            true;
-
-
-        statusElement.textContent =
-            "Ready";
-
-        statusElement.classList.remove(
-            "running"
-        );
-
-
-        render();
-    }
+    resetSimulation
 );
 
 
 /* ============================================================
-   SLIDERS
+   SPEED
 ============================================================ */
-
-mSlider.addEventListener(
-    "input",
-    function () {
-
-        mValue.textContent =
-            Number(
-                mSlider.value
-            ).toFixed(2);
-    }
-);
-
-
-alphaSlider.addEventListener(
-    "input",
-    function () {
-
-        alphaValue.textContent =
-            Number(
-                alphaSlider.value
-            ).toFixed(2);
-    }
-);
-
-
-tauSlider.addEventListener(
-    "input",
-    function () {
-
-        tauValue.textContent =
-            Number(
-                tauSlider.value
-            ).toFixed(2);
-    }
-);
-
 
 speedSlider.addEventListener(
     "input",
-    function () {
+    () => {
 
         speedValue.textContent =
-            speedSlider.value +
+            speedSlider.value
+            +
             "×";
     }
 );
@@ -1721,8 +1892,10 @@ speedSlider.addEventListener(
    START
 ============================================================ */
 
+updateReportedResults();
+
 render();
 
 console.log(
-    "Dissertation simulation loaded successfully."
+    "Dissertation simulation loaded."
 );

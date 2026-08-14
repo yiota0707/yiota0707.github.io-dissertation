@@ -2,18 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Assortative Matching and Cooperation</title>
 
-    <link rel="stylesheet" href="style.css">
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 </head>
 
 <body>
 
-<header class="site-header">
+<header class="hero">
 
-    <div class="header-inner">
+    <div class="hero-inner">
 
         <p class="eyebrow">
             MSc Computer Science Dissertation · University of Warwick
@@ -23,12 +30,12 @@
             Assortative Matching and the Emergence of Cooperation
         </h1>
 
-        <p class="intro">
-            Interactive simulation of the two reinforcement-learning models
-            studied in the dissertation:
+        <p class="subtitle">
+            Interactive demonstration of the
             <span class="baseline-text">Baseline</span>
             and
-            <span class="hybrid-text">Hybrid</span>.
+            <span class="hybrid-text">Hybrid</span>
+            reinforcement-learning models.
         </p>
 
     </div>
@@ -39,160 +46,205 @@
 <main>
 
     <!-- =====================================================
-         CONTROLS
+         EXPERIMENT SETTINGS
     ====================================================== -->
 
-    <section class="controls">
+    <section class="experiment-settings">
 
-        <div class="controls-top">
+        <div class="settings-heading">
 
             <div>
-                <p class="small-heading">SIMULATION</p>
-                <h2>Matched experimental conditions</h2>
+                <p class="section-label">
+                    PRIMARY EXPERIMENT
+                </p>
+
+                <h2>
+                    Dissertation configuration
+                </h2>
             </div>
 
-            <div id="status" class="status">
+            <div
+                id="status"
+                class="status"
+            >
                 Ready
             </div>
 
         </div>
 
 
-        <div class="control-grid">
+        <p class="settings-description">
+            The parameters below match the primary assortativity experiment
+            reported in the dissertation. Only the assortativity parameter
+            <i>m</i> changes between conditions.
+        </p>
 
-            <!-- m -->
 
-            <div class="control">
+        <!-- M VALUES -->
 
-                <div class="control-title">
-                    <span>Assortativity <i>m</i></span>
-                    <strong id="mValue">0.00</strong>
-                </div>
+        <div class="m-selector">
 
-                <input
-                    id="mSlider"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value="0"
+            <span class="selector-title">
+                Assortativity <i>m</i>
+            </span>
+
+            <div class="m-buttons">
+
+                <button
+                    class="m-button active"
+                    data-m="0"
                 >
+                    0.0
+                </button>
 
-                <div class="range-labels">
-                    <span>Random</span>
-                    <span>Fully assortative</span>
-                </div>
+                <button
+                    class="m-button"
+                    data-m="0.3"
+                >
+                    0.3
+                </button>
+
+                <button
+                    class="m-button"
+                    data-m="0.5"
+                >
+                    0.5
+                </button>
+
+                <button
+                    class="m-button"
+                    data-m="0.7"
+                >
+                    0.7
+                </button>
+
+                <button
+                    class="m-button"
+                    data-m="1"
+                >
+                    1.0
+                </button>
 
             </div>
 
+        </div>
 
-            <!-- alpha -->
 
-            <div class="control">
+        <!-- FIXED PARAMETERS -->
 
-                <div class="control-title">
-                    <span>Learning rate α</span>
-                    <strong id="alphaValue">0.05</strong>
-                </div>
+        <div class="parameter-grid">
 
-                <input
-                    id="alphaSlider"
-                    type="range"
-                    min="0.01"
-                    max="0.20"
-                    step="0.01"
-                    value="0.05"
-                >
-
-                <div class="range-labels">
-                    <span>0.01</span>
-                    <span>0.20</span>
-                </div>
-
+            <div class="parameter">
+                <span>Population</span>
+                <strong>N = 20</strong>
             </div>
 
-
-            <!-- tau -->
-
-            <div class="control">
-
-                <div class="control-title">
-                    <span>Exploration τ</span>
-                    <strong id="tauValue">1.00</strong>
-                </div>
-
-                <input
-                    id="tauSlider"
-                    type="range"
-                    min="0.10"
-                    max="1.00"
-                    step="0.05"
-                    value="1"
-                >
-
-                <div class="range-labels">
-                    <span>0.10</span>
-                    <span>1.00</span>
-                </div>
-
+            <div class="parameter">
+                <span>PD rounds</span>
+                <strong>20</strong>
             </div>
 
+            <div class="parameter">
+                <span>Training horizon</span>
+                <strong>T = 100,000</strong>
+            </div>
 
-            <!-- speed -->
+            <div class="parameter">
+                <span>Simulations</span>
+                <strong>10</strong>
+            </div>
 
-            <div class="control">
+            <div class="parameter">
+                <span>Learning rate</span>
+                <strong>α = 0.05</strong>
+            </div>
 
-                <div class="control-title">
-                    <span>Speed</span>
-                    <strong id="speedValue">1×</strong>
-                </div>
+            <div class="parameter">
+                <span>Temperature</span>
+                <strong>τ = 1.0</strong>
+            </div>
+
+            <div class="parameter">
+                <span>Discount</span>
+                <strong>γ = 1.0</strong>
+            </div>
+
+            <div class="parameter">
+                <span>Initial Q-values</span>
+                <strong>0</strong>
+            </div>
+
+        </div>
+
+
+        <div class="payoffs">
+
+            <span>
+                Prisoner's Dilemma:
+            </span>
+
+            <strong>
+                T = 5
+            </strong>
+
+            <strong>
+                R = 3
+            </strong>
+
+            <strong>
+                P = 1
+            </strong>
+
+            <strong>
+                S = 0
+            </strong>
+
+        </div>
+
+
+        <div class="simulation-controls">
+
+            <button
+                id="runButton"
+                class="run-button"
+            >
+                ▶ Run demonstration
+            </button>
+
+            <button
+                id="pauseButton"
+                class="secondary-button"
+                disabled
+            >
+                Pause
+            </button>
+
+            <button
+                id="resetButton"
+                class="secondary-button"
+            >
+                Reset
+            </button>
+
+
+            <label class="speed-control">
+
+                Visual speed
 
                 <input
                     id="speedSlider"
                     type="range"
                     min="1"
-                    max="25"
+                    max="10"
                     step="1"
-                    value="1"
+                    value="4"
                 >
 
-                <div class="range-labels">
-                    <span>Slow</span>
-                    <span>Fast</span>
-                </div>
+                <span id="speedValue">
+                    4×
+                </span>
 
-            </div>
-
-        </div>
-
-
-        <div class="buttons">
-
-            <button id="runButton" class="run-button">
-                ▶ Run
-            </button>
-
-            <button id="pauseButton" class="secondary-button" disabled>
-                Pause
-            </button>
-
-            <button id="resetButton" class="secondary-button">
-                Reset
-            </button>
-
-        </div>
-
-
-        <div class="fixed-parameters">
-
-            <span>N = 20 agents</span>
-            <span>20 PD rounds / iteration</span>
-            <span>γ = 1.0</span>
-            <span>Initial Q = 0</span>
-            <span>R = 3</span>
-            <span>T = 5</span>
-            <span>P = 1</span>
-            <span>S = 0</span>
+            </label>
 
         </div>
 
@@ -201,39 +253,40 @@
 
 
     <!-- =====================================================
-         TWO SIMULATIONS
+         TWO MODEL SIMULATIONS
     ====================================================== -->
 
-    <section class="simulation-grid">
+    <section class="models">
 
-        <!-- =================================================
-             BASELINE
-        ================================================== -->
+        <!-- BASELINE -->
 
-        <article class="simulation-card baseline-card">
+        <article class="model-card baseline-card">
 
             <div class="model-heading">
 
                 <div>
 
-                    <p class="experiment-label baseline-text">
+                    <p class="model-number baseline-text">
                         EXPERIMENT 1
                     </p>
 
-                    <h2>Baseline</h2>
+                    <h2>
+                        Baseline
+                    </h2>
 
                     <p>
-                        Agents learn to cooperate or defect.
-                        Every round, the entire population is rematched
-                        randomly or assortatively according to <i>m</i>).
+                        The whole population is rematched before each
+                        Prisoner's Dilemma round. With probability
+                        <i>m</i>, matching is assortative according to
+                        the agents' previous PD actions; otherwise it
+                        is random.
                     </p>
 
                 </div>
 
-
-                <div class="baseline-tag model-tag">
+                <div class="model-tag baseline-tag">
                     No learned<br>
-                    stay / switch
+                    partner retention
                 </div>
 
             </div>
@@ -241,46 +294,58 @@
 
             <div class="process baseline-process">
 
-                <span>PD interaction</span>
+                <span>
+                    Rematch population
+                </span>
 
                 <b>→</b>
 
-                <span>Learn C / D</span>
+                <span>
+                    Repeated PD
+                </span>
 
                 <b>→</b>
 
-                <span>Full rematching</span>
+                <span>
+                    Q update
+                </span>
 
             </div>
 
 
-            <div class="simulation-stage baseline-stage">
+            <div
+                id="baselineStage"
+                class="simulation-stage baseline-stage"
+            >
 
-                <canvas id="baselineCanvas"></canvas>
+                <svg
+                    id="baselineLines"
+                    class="pair-lines"
+                ></svg>
 
-                <div class="stage-label">
-                    Current partnerships
-                </div>
+                <div
+                    id="baselineAgents"
+                    class="agents-layer"
+                ></div>
 
             </div>
 
 
             <div class="legend">
 
-                <div>
-                    <span class="agent-demo baseline-cooperator">C</span>
-                    Cooperating
-                </div>
+                <span>
+                    <i class="node-example baseline-coop">
+                        C
+                    </i>
+                    Cooperate
+                </span>
 
-                <div>
-                    <span class="agent-demo baseline-defector">D</span>
-                    Defecting
-                </div>
-
-                <div>
-                    <span class="line-demo baseline-line"></span>
-                    Partnership
-                </div>
+                <span>
+                    <i class="node-example baseline-defect">
+                        D
+                    </i>
+                    Defect
+                </span>
 
             </div>
 
@@ -288,23 +353,36 @@
             <div class="metrics">
 
                 <div class="metric">
-                    <span>Iteration</span>
-                    <strong id="baselineIteration">0</strong>
+                    <span>
+                        Visual iteration
+                    </span>
+
+                    <strong id="baselineIteration">
+                        0
+                    </strong>
                 </div>
 
-                <div class="metric main-metric">
-                    <span>Cooperation</span>
-                    <strong id="baselineCooperation">—</strong>
-                </div>
-
-                <div class="metric">
-                    <span>Cooperators</span>
-                    <strong id="baselineCooperators">—</strong>
-                </div>
 
                 <div class="metric">
-                    <span>Rematching</span>
-                    <strong>100%</strong>
+                    <span>
+                        Current demonstration
+                    </span>
+
+                    <strong id="baselineLive">
+                        —
+                    </strong>
+                </div>
+
+
+                <div class="metric reference-metric baseline-reference">
+
+                    <span>
+                        Dissertation mean
+                    </span>
+
+                    <strong id="baselineReported">
+                        25.8%
+                    </strong>
                 </div>
 
             </div>
@@ -313,32 +391,33 @@
 
 
 
-        <!-- =================================================
-             HYBRID
-        ================================================== -->
+        <!-- HYBRID -->
 
-        <article class="simulation-card hybrid-card">
+        <article class="model-card hybrid-card">
 
             <div class="model-heading">
 
                 <div>
 
-                    <p class="experiment-label hybrid-text">
+                    <p class="model-number hybrid-text">
                         EXPERIMENT 2
                     </p>
 
-                    <h2>Hybrid</h2>
+                    <h2>
+                        Hybrid
+                    </h2>
 
                     <p>
-                        Agents learn both C/D behaviour and whether
-                        their current relationship should be retained
-                        or dissolved.
+                        Agents first learn whether to stay with or switch
+                        from their current partner. A relationship is
+                        retained only when both agents choose stay.
+                        Dissolved partnerships enter random or assortative
+                        rematching.
                     </p>
 
                 </div>
 
-
-                <div class="hybrid-tag model-tag">
+                <div class="model-tag hybrid-tag">
                     Learned<br>
                     stay / switch
                 </div>
@@ -348,50 +427,64 @@
 
             <div class="process hybrid-process">
 
-                <span>Stay / switch</span>
+                <span>
+                    Stay / switch
+                </span>
 
                 <b>→</b>
 
-                <span>Selective retention</span>
+                <span>
+                    Retain or dissolve
+                </span>
 
                 <b>→</b>
 
-                <span>Rematch switchers</span>
+                <span>
+                    Rematch switchers
+                </span>
 
                 <b>→</b>
 
-                <span>PD</span>
+                <span>
+                    PD
+                </span>
 
             </div>
 
 
-            <div class="simulation-stage hybrid-stage">
+            <div
+                id="hybridStage"
+                class="simulation-stage hybrid-stage"
+            >
 
-                <canvas id="hybridCanvas"></canvas>
+                <svg
+                    id="hybridLines"
+                    class="pair-lines"
+                ></svg>
 
-                <div class="stage-label">
-                    Current partnerships
-                </div>
+                <div
+                    id="hybridAgents"
+                    class="agents-layer"
+                ></div>
 
             </div>
 
 
             <div class="legend">
 
-                <div>
-                    <span class="agent-demo hybrid-cooperator">C</span>
-                    Cooperating
-                </div>
+                <span>
+                    <i class="node-example hybrid-coop">
+                        C
+                    </i>
+                    Cooperate
+                </span>
 
-                <div>
-                    <span class="agent-demo hybrid-defector">D</span>
-                    Defecting
-                </div>
-
-                <div>
-                    <span class="line-demo hybrid-line"></span>
-                    Partnership
-                </div>
+                <span>
+                    <i class="node-example hybrid-defect">
+                        D
+                    </i>
+                    Defect
+                </span>
 
             </div>
 
@@ -399,23 +492,36 @@
             <div class="metrics">
 
                 <div class="metric">
-                    <span>Iteration</span>
-                    <strong id="hybridIteration">0</strong>
+                    <span>
+                        Visual iteration
+                    </span>
+
+                    <strong id="hybridIteration">
+                        0
+                    </strong>
                 </div>
 
-                <div class="metric main-metric">
-                    <span>Cooperation</span>
-                    <strong id="hybridCooperation">—</strong>
-                </div>
-
-                <div class="metric">
-                    <span>Cooperators</span>
-                    <strong id="hybridCooperators">—</strong>
-                </div>
 
                 <div class="metric">
-                    <span>Learned switch rate</span>
-                    <strong id="hybridSwitching">—</strong>
+                    <span>
+                        Current demonstration
+                    </span>
+
+                    <strong id="hybridLive">
+                        —
+                    </strong>
+                </div>
+
+
+                <div class="metric reference-metric hybrid-reference">
+
+                    <span>
+                        Dissertation mean
+                    </span>
+
+                    <strong id="hybridReported">
+                        76.6%
+                    </strong>
                 </div>
 
             </div>
@@ -427,50 +533,79 @@
 
 
     <!-- =====================================================
-         ONLY SHORT EXPLANATION
+         RESULT COMPARISON
     ====================================================== -->
 
-    <section class="difference">
+    <section class="result-section">
 
-        <p class="small-heading">
-            WHAT YOU ARE WATCHING
+        <p class="section-label">
+            VALIDATED RESULT
         </p>
 
         <h2>
-            Same learning environment. Different relationship mechanism.
+            Final cooperation at
+            <i>m</i> =
+            <span id="resultM">
+                0.0
+            </span>
         </h2>
 
 
-        <div class="difference-grid">
+        <div class="result-bars">
 
-            <div class="difference-box baseline-box">
+            <div class="result-row">
 
-                <h3>Baseline</h3>
+                <span class="result-name baseline-text">
+                    Baseline
+                </span>
 
-                <p>
-                    Every round reconstructs the partnerships.
-                    With probability <i>m</i>), rematching groups agents
-                    according to their previous PD behaviour.
-                    Otherwise pairing is random.
-                </p>
+                <div class="bar-track">
+
+                    <div
+                        id="baselineBar"
+                        class="bar baseline-bar"
+                    ></div>
+
+                </div>
+
+                <strong id="baselineResult">
+                    25.8%
+                </strong>
 
             </div>
 
 
-            <div class="difference-box hybrid-box">
+            <div class="result-row">
 
-                <h3>Hybrid</h3>
+                <span class="result-name hybrid-text">
+                    Hybrid
+                </span>
 
-                <p>
-                    Agents first choose stay or switch.
-                    A pair survives only when both select stay.
-                    Dissolved pairs enter the same random or
-                    assortative rematching procedure.
-                </p>
+                <div class="bar-track">
+
+                    <div
+                        id="hybridBar"
+                        class="bar hybrid-bar"
+                    ></div>
+
+                </div>
+
+                <strong id="hybridResult">
+                    76.6%
+                </strong>
 
             </div>
 
         </div>
+
+
+        <p class="result-note">
+            Values shown here are the mean final cooperation values
+            reported from the 10 independent simulations in the
+            dissertation. The animated agents above are a browser
+            demonstration of the model mechanisms rather than a
+            replacement for the full computational experiment.
+        </p>
 
     </section>
 
@@ -479,14 +614,8 @@
 
 <footer>
 
-    <p>
-        Panayiota Papafiggou · MSc Computer Science ·
-        University of Warwick · 2026
-    </p>
-
-    <p class="footer-small">
-        Interactive browser implementation based on the dissertation model logic.
-    </p>
+    Panayiota Papafiggou · MSc Computer Science ·
+    University of Warwick · 2026
 
 </footer>
 
