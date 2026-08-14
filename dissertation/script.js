@@ -1,2291 +1,1322 @@
 "use strict";
 
 
-/*
-    ============================================================
-    INTERACTIVE DISSERTATION DEMONSTRATION
-    ============================================================
+/* ============================================================
+   CONSTANTS
+   Based on dissertation model configuration
+============================================================ */
 
-    This file implements an educational browser visualisation of
-    the mechanisms described in the dissertation.
-
-    It is intentionally labelled as a demonstration because it is
-    not the full Numba-optimised experimental implementation used
-    to produce the dissertation's numerical results.
-
-    Model colours:
-        Baseline: #c06082
-        Hybrid:   #7b6fd6
-
-    Action colours:
-        Cooperation: #7b6fd6
-        Defection:   #c06082
-*/
-
-
-const COOPERATE = 0;
-const DEFECT = 1;
-
-const STAY = 0;
-const SWITCH = 1;
-
-const COOPERATE_COLOUR = "#7b6fd6";
-const DEFECT_COLOUR = "#c06082";
+const N_AGENTS = 20;
+const ROUNDS_G = 20;
+const GAMMA = 1.0;
 
 const BASELINE_COLOUR = "#c06082";
 const HYBRID_COLOUR = "#7b6fd6";
 
-const CONNECTION_COLOUR = "#bbb5c0";
-const TEXT_COLOUR = "#211d28";
+const BASELINE_DARK = "#954561";
+const HYBRID_DARK = "#5d51b6";
+
+const REWARD_1 = [
+    [3, 0],
+    [5, 1]
+];
+
+const REWARD_2 = [
+    [3, 5],
+    [0, 1]
+];
+
+
+/* ============================================================
+   SEEDED RANDOM GENERATOR
+============================================================ */
+
+function mulberry32(seed) {
+
+    return function () {
+
+        let t = seed += 0x6D2B79F5;
+
+        t = Math.imul(
+            t ^ (t >>> 15),
+            t | 1
+        );
+
+        t ^= t + Math.imul(
+            t ^ (t >>> 7),
+            t | 61
+        );
+
+        return (
+            (t ^ (t >>> 14)) >>> 0
+        ) / 4294967296;
+    };
+}
+
+
+/* ============================================================
+   GENERAL HELPERS
+============================================================ */
+
+function stateToIndex(state) {
+
+    if (state === 0) return 0;
+    if (state === 1) return 1;
+    if (state === 100) return 2;
+
+    return 3;
+}
+
+
+function clamp(value, low, high) {
+
+    return Math.max(
+        low,
+        Math.min(high, value)
+    );
+}
+
+
+function shuffle(array, random) {
+
+    const copy = array.slice();
+
+    for (
+        let i = copy.length - 1;
+        i > 0;
+        i--
+    ) {
+
+        const j =
+            Math.floor(
+                random() * (i + 1)
+            );
+
+        [
+            copy[i],
+            copy[j]
+        ] = [
+            copy[j],
+            copy[i]
+        ];
+    }
+
+    return copy;
+}
+
+
+function percentage(value) {
+
+    return `${(value * 100).toFixed(1)}%`;
+}
+
+
+/* ============================================================
+   CREATE Q TABLE
+============================================================ */
+
+function createQTable() {
+
+    const Q = [];
+
+    for (
+        let agent = 0;
+        agent < N_AGENTS;
+        agent++
+    ) {
+
+        const states = [];
+
+        for (
+            let state = 0;
+            state < 4;
+            state++
+        ) {
+
+            states.push([
+                0,
+                0
+            ]);
+        }
+
+        Q.push(states);
+    }
+
+    return Q;
+}
+
+
+/* ============================================================
+   ACTION SELECTION
+
+   IMPORTANT:
+   This deliberately mirrors the supplied Python model:
+
+       q0 = tau * Q[..., 0]
+       q1 = tau * Q[..., 1]
+
+   rather than changing the action-selection equation.
+============================================================ */
+
+function selectAction(
+    Q,
+    agent,
+    state,
+    tau,
+    random
+) {
+
+    const si =
+        stateToIndex(state);
+
+    const q0 =
+        tau *
+        Q[agent][si][0];
+
+    const q1 =
+        tau *
+        Q[agent][si][1];
+
+    const maxQ =
+        Math.max(q0, q1);
+
+    const e0 =
+        Math.exp(q0 - maxQ);
+
+    const e1 =
+        Math.exp(q1 - maxQ);
+
+    const p0 =
+        e0 / (e0 + e1);
+
+    return (
+        random() < p0
+            ? 0
+            : 1
+    );
+}
+
+
+/* ============================================================
+   PAIRING
+============================================================ */
+
+function randomPairsFromIds(
+    ids,
+    random
+) {
+
+    const shuffled =
+        shuffle(ids, random);
+
+    const pairs = [];
+
+    for (
+        let i = 0;
+        i + 1 < shuffled.length;
+        i += 2
+    ) {
+
+        pairs.push([
+            shuffled[i],
+            shuffled[i + 1]
+        ]);
+    }
+
+    return pairs;
+}
+
+
+function randomPairs(
+    n,
+    random
+) {
+
+    return randomPairsFromIds(
+        Array.from(
+            { length: n },
+            (_, index) => index
+        ),
+        random
+    );
+}
 
 
 /*
-    ============================================================
-    DOCUMENT ELEMENTS
-    ============================================================
+    Mirrors create_assortative_pairs /
+    assortative_pairing_n.
+
+    Agents whose previous PD action is C
+    are paired with C agents where possible.
+
+    Previous D agents are paired with D
+    agents where possible.
+
+    Leftovers are pooled and paired.
 */
 
+function assortativePairs(
+    ids,
+    actionsPD,
+    random
+) {
 
-const canvas =
-    document.getElementById("agentCanvas");
+    const cooperators = [];
+    const defectors = [];
 
-const context =
-    canvas.getContext("2d");
+    ids.forEach(agent => {
 
-
-const chartCanvas =
-    document.getElementById("cooperationChart");
-
-const chartContext =
-    chartCanvas.getContext("2d");
-
-
-const modelSelect =
-    document.getElementById("modelSelect");
-
-const populationInput =
-    document.getElementById("populationInput");
-
-const assortativityInput =
-    document.getElementById("assortativityInput");
-
-const learningRateInput =
-    document.getElementById("learningRateInput");
-
-const discountInput =
-    document.getElementById("discountInput");
-
-const temperatureInput =
-    document.getElementById("temperatureInput");
-
-const roundsInput =
-    document.getElementById("roundsInput");
-
-const speedInput =
-    document.getElementById("speedInput");
+        if (
+            actionsPD[agent] === 0
+        ) {
+            cooperators.push(agent);
+        } else {
+            defectors.push(agent);
+        }
+    });
 
 
-const populationOutput =
-    document.getElementById("populationOutput");
+    const C =
+        shuffle(cooperators, random);
 
-const assortativityOutput =
-    document.getElementById("assortativityOutput");
-
-const learningRateOutput =
-    document.getElementById("learningRateOutput");
-
-const discountOutput =
-    document.getElementById("discountOutput");
-
-const temperatureOutput =
-    document.getElementById("temperatureOutput");
-
-const roundsOutput =
-    document.getElementById("roundsOutput");
-
-const speedOutput =
-    document.getElementById("speedOutput");
+    const D =
+        shuffle(defectors, random);
 
 
-const runButton =
-    document.getElementById("runButton");
+    const pairs = [];
+    const leftovers = [];
 
-const stepButton =
-    document.getElementById("stepButton");
+
+    let index = 0;
+
+    while (
+        index + 1 < C.length
+    ) {
+
+        pairs.push([
+            C[index],
+            C[index + 1]
+        ]);
+
+        index += 2;
+    }
+
+    if (
+        index < C.length
+    ) {
+        leftovers.push(C[index]);
+    }
+
+
+    index = 0;
+
+    while (
+        index + 1 < D.length
+    ) {
+
+        pairs.push([
+            D[index],
+            D[index + 1]
+        ]);
+
+        index += 2;
+    }
+
+    if (
+        index < D.length
+    ) {
+        leftovers.push(D[index]);
+    }
+
+
+    const leftoverPairs =
+        randomPairsFromIds(
+            leftovers,
+            random
+        );
+
+    pairs.push(
+        ...leftoverPairs
+    );
+
+    return pairs;
+}
+
+
+/* ============================================================
+   MEMORY AND Q UPDATE
+============================================================ */
+
+function createMemories() {
+
+    return Array.from(
+        { length: N_AGENTS },
+        () => []
+    );
+}
+
+
+function storeExperience(
+    memories,
+    agent,
+    state,
+    action,
+    reward
+) {
+
+    memories[agent].push({
+        state,
+        action,
+        reward
+    });
+}
+
+
+/*
+    Mirrors:
+
+        running = reward + gamma * running
+
+        Q = (1-lr)Q + lr*running
+
+    and processes each trajectory backwards.
+*/
+
+function updateQValues(
+    Q,
+    memories,
+    learningRate
+) {
+
+    for (
+        let agent = 0;
+        agent < N_AGENTS;
+        agent++
+    ) {
+
+        let running = 0;
+
+        const memory =
+            memories[agent];
+
+
+        for (
+            let k = memory.length - 1;
+            k >= 0;
+            k--
+        ) {
+
+            const experience =
+                memory[k];
+
+            running =
+                experience.reward +
+                GAMMA * running;
+
+
+            const si =
+                stateToIndex(
+                    experience.state
+                );
+
+            const action =
+                experience.action;
+
+
+            Q[agent][si][action] =
+                (1 - learningRate) *
+                    Q[agent][si][action]
+                +
+                learningRate *
+                    running;
+        }
+
+
+        memories[agent] = [];
+    }
+}
+
+
+/* ============================================================
+   MODEL CLASS
+============================================================ */
+
+class MARLModel {
+
+    constructor(type) {
+
+        this.type = type;
+
+        this.seed =
+            type === "baseline"
+                ? 1235
+                : 1235;
+
+        this.reset();
+    }
+
+
+    reset() {
+
+        this.random =
+            mulberry32(this.seed);
+
+
+        this.Q =
+            createQTable();
+
+
+        this.actionsPD =
+            Array.from(
+                { length: N_AGENTS },
+                () =>
+                    this.random() < 0.5
+                        ? 0
+                        : 1
+            );
+
+
+        this.groups =
+            randomPairs(
+                N_AGENTS,
+                this.random
+            );
+
+
+        this.memories =
+            createMemories();
+
+
+        this.iteration = 0;
+
+        this.lastCooperation = 0;
+
+        this.lastSwitchRate =
+            this.type === "baseline"
+                ? 1
+                : 0;
+
+        this.history = [];
+
+        this.switchHistory = [];
+    }
+
+
+    /* ========================================================
+       BASELINE REMATCHING
+    ======================================================== */
+
+    rematchBaseline(m) {
+
+        const ids =
+            Array.from(
+                { length: N_AGENTS },
+                (_, index) => index
+            );
+
+
+        if (
+            this.random() < m
+        ) {
+
+            this.groups =
+                assortativePairs(
+                    ids,
+                    this.actionsPD,
+                    this.random
+                );
+
+        } else {
+
+            this.groups =
+                randomPairs(
+                    N_AGENTS,
+                    this.random
+                );
+        }
+    }
+
+
+    /* ========================================================
+       HYBRID REMATCHING
+    ======================================================== */
+
+    rematchHybrid(
+        m,
+        tau
+    ) {
+
+        const groupsStay = [];
+        const switchPool = [];
+
+        let switchActions = 0;
+
+
+        for (
+            const pair of this.groups
+        ) {
+
+            const i = pair[0];
+            const j = pair[1];
+
+
+            /*
+                Switching state is the partner's
+                previous PD action:
+
+                    0 = previous C
+                    1 = previous D
+            */
+
+            const stateI =
+                this.actionsPD[j];
+
+            const stateJ =
+                this.actionsPD[i];
+
+
+            const actionI =
+                selectAction(
+                    this.Q,
+                    i,
+                    stateI,
+                    tau,
+                    this.random
+                );
+
+
+            const actionJ =
+                selectAction(
+                    this.Q,
+                    j,
+                    stateJ,
+                    tau,
+                    this.random
+                );
+
+
+            /*
+                Zero immediate reward for the
+                relationship decision.
+
+                Later PD rewards propagate backwards.
+            */
+
+            storeExperience(
+                this.memories,
+                i,
+                stateI,
+                actionI,
+                0
+            );
+
+
+            storeExperience(
+                this.memories,
+                j,
+                stateJ,
+                actionJ,
+                0
+            );
+
+
+            switchActions +=
+                actionI + actionJ;
+
+
+            /*
+                Relationship continues ONLY if
+                both agents choose stay.
+
+                If either selects switch,
+                both agents enter rematching.
+            */
+
+            if (
+                actionI === 1 ||
+                actionJ === 1
+            ) {
+
+                switchPool.push(i);
+                switchPool.push(j);
+
+            } else {
+
+                groupsStay.push([
+                    i,
+                    j
+                ]);
+            }
+        }
+
+
+        let rematchedGroups = [];
+
+
+        if (
+            switchPool.length > 0
+        ) {
+
+            if (
+                this.random() < m
+            ) {
+
+                rematchedGroups =
+                    assortativePairs(
+                        switchPool,
+                        this.actionsPD,
+                        this.random
+                    );
+
+            } else {
+
+                rematchedGroups =
+                    randomPairsFromIds(
+                        switchPool,
+                        this.random
+                    );
+            }
+        }
+
+
+        this.groups = [
+            ...groupsStay,
+            ...rematchedGroups
+        ];
+
+
+        return (
+            switchActions /
+            N_AGENTS
+        );
+    }
+
+
+    /* ========================================================
+       ONE FULL TRAINING ITERATION
+    ======================================================== */
+
+    step(
+        m,
+        learningRate,
+        tau
+    ) {
+
+        let CC = 0;
+        let CD = 0;
+        let DC = 0;
+        let DD = 0;
+
+        let totalSwitchRate = 0;
+
+
+        for (
+            let round = 0;
+            round < ROUNDS_G;
+            round++
+        ) {
+
+            /*
+                REMATCHING OCCURS BEFORE
+                EACH PD INTERACTION ROUND.
+            */
+
+            if (
+                this.type === "baseline"
+            ) {
+
+                this.rematchBaseline(m);
+
+                totalSwitchRate += 1;
+
+            } else {
+
+                totalSwitchRate +=
+                    this.rematchHybrid(
+                        m,
+                        tau
+                    );
+            }
+
+
+            /* ================================================
+               PLAY PD FOR EACH CURRENT PAIR
+            ================================================= */
+
+            for (
+                const pair of this.groups
+            ) {
+
+                const i = pair[0];
+                const j = pair[1];
+
+
+                const previousI =
+                    this.actionsPD[i];
+
+                const previousJ =
+                    this.actionsPD[j];
+
+
+                /*
+                    PD state labels follow Python:
+
+                    100 = partner previously C
+                    101 = partner previously D
+                */
+
+                const stateI =
+                    100 + previousJ;
+
+                const stateJ =
+                    100 + previousI;
+
+
+                const actionI =
+                    selectAction(
+                        this.Q,
+                        i,
+                        stateI,
+                        tau,
+                        this.random
+                    );
+
+
+                const actionJ =
+                    selectAction(
+                        this.Q,
+                        j,
+                        stateJ,
+                        tau,
+                        this.random
+                    );
+
+
+                const rewardI =
+                    REWARD_1[actionI][actionJ];
+
+                const rewardJ =
+                    REWARD_2[actionI][actionJ];
+
+
+                storeExperience(
+                    this.memories,
+                    i,
+                    stateI,
+                    actionI,
+                    rewardI
+                );
+
+
+                storeExperience(
+                    this.memories,
+                    j,
+                    stateJ,
+                    actionJ,
+                    rewardJ
+                );
+
+
+                /*
+                    Count PD outcome
+                */
+
+                if (
+                    actionI === 0 &&
+                    actionJ === 0
+                ) {
+                    CC++;
+                }
+
+                else if (
+                    actionI === 0 &&
+                    actionJ === 1
+                ) {
+                    CD++;
+                }
+
+                else if (
+                    actionI === 1 &&
+                    actionJ === 0
+                ) {
+                    DC++;
+                }
+
+                else {
+                    DD++;
+                }
+
+
+                this.actionsPD[i] =
+                    actionI;
+
+                this.actionsPD[j] =
+                    actionJ;
+            }
+        }
+
+
+        /*
+            Q VALUES UPDATE ONCE AFTER THE
+            20-ROUND REPEATED GAME.
+        */
+
+        updateQValues(
+            this.Q,
+            this.memories,
+            learningRate
+        );
+
+
+        const totalOutcomes =
+            CC + CD + DC + DD;
+
+
+        const cooperation =
+            totalOutcomes > 0
+                ?
+                (
+                    2 * CC +
+                    CD +
+                    DC
+                )
+                /
+                (
+                    2 *
+                    totalOutcomes
+                )
+                :
+                0;
+
+
+        this.iteration++;
+
+        this.lastCooperation =
+            cooperation;
+
+
+        this.lastSwitchRate =
+            totalSwitchRate /
+            ROUNDS_G;
+
+
+        this.history.push(
+            cooperation
+        );
+
+
+        this.switchHistory.push(
+            this.lastSwitchRate
+        );
+
+
+        /*
+            Browser graph does not need
+            tens of thousands of points.
+        */
+
+        if (
+            this.history.length > 500
+        ) {
+
+            this.history.shift();
+
+            this.switchHistory.shift();
+        }
+    }
+
+
+    getCooperatorCount() {
+
+        let count = 0;
+
+        for (
+            const action of this.actionsPD
+        ) {
+
+            if (
+                action === 0
+            ) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+}
+
+
+/* ============================================================
+   CREATE MODELS
+============================================================ */
+
+const baseline =
+    new MARLModel("baseline");
+
+const hybrid =
+    new MARLModel("hybrid");
+
+
+/* ============================================================
+   DOM
+============================================================ */
+
+const mSlider =
+    document.getElementById("mSlider");
+
+const lrSlider =
+    document.getElementById("lrSlider");
+
+const tauSlider =
+    document.getElementById("tauSlider");
+
+const speedSlider =
+    document.getElementById("speedSlider");
+
+
+const mValue =
+    document.getElementById("mValue");
+
+const lrValue =
+    document.getElementById("lrValue");
+
+const tauValue =
+    document.getElementById("tauValue");
+
+const speedValue =
+    document.getElementById("speedValue");
+
+
+const startButton =
+    document.getElementById("startButton");
+
+const pauseButton =
+    document.getElementById("pauseButton");
 
 const resetButton =
     document.getElementById("resetButton");
 
-const defaultPresetButton =
-    document.getElementById("defaultPresetButton");
+const simulationStatus =
+    document.getElementById("simulationStatus");
 
 
-const generationValue =
-    document.getElementById("generationValue");
+const baselineNetwork =
+    document.getElementById(
+        "baselineNetwork"
+    );
 
-const cooperationMetric =
-    document.getElementById("cooperationMetric");
-
-const rewardMetric =
-    document.getElementById("rewardMetric");
-
-const switchingMetric =
-    document.getElementById("switchingMetric");
-
-const stablePairsMetric =
-    document.getElementById("stablePairsMetric");
+const hybridNetwork =
+    document.getElementById(
+        "hybridNetwork"
+    );
 
 
-const statusDot =
-    document.getElementById("statusDot");
+const baselineChart =
+    document.getElementById(
+        "baselineChart"
+    );
 
-const statusText =
-    document.getElementById("statusText");
-
-const modelExplanation =
-    document.getElementById("modelExplanation");
-
-const chartModelLabel =
-    document.getElementById("chartModelLabel");
-
-const canvasModelName =
-    document.getElementById("canvasModelName");
-
-const canvasAssortativity =
-    document.getElementById("canvasAssortativity");
+const hybridChart =
+    document.getElementById(
+        "hybridChart"
+    );
 
 
-const ccValue =
-    document.getElementById("ccValue");
+/* ============================================================
+   NETWORK NODE POSITIONS
+============================================================ */
 
-const cdValue =
-    document.getElementById("cdValue");
-
-const dcValue =
-    document.getElementById("dcValue");
-
-const ddValue =
-    document.getElementById("ddValue");
+const agentPositions = [];
 
 
-const ccBar =
-    document.getElementById("ccBar");
+function generateAgentPositions() {
 
-const cdBar =
-    document.getElementById("cdBar");
+    agentPositions.length = 0;
 
-const dcBar =
-    document.getElementById("dcBar");
+    const centerX = 300;
+    const centerY = 210;
 
-const ddBar =
-    document.getElementById("ddBar");
+    const outerRadius = 166;
+    const innerRadius = 105;
 
 
-const mobileMenuButton =
-    document.getElementById("mobileMenuButton");
+    for (
+        let i = 0;
+        i < N_AGENTS;
+        i++
+    ) {
 
-const navigation =
-    document.getElementById("navigation");
-
-
-/*
-    ============================================================
-    SIMULATION STATE
-    ============================================================
-*/
+        const ring =
+            i % 2 === 0
+                ? outerRadius
+                : innerRadius;
 
 
-let agents = [];
-let pairs = [];
-
-let generation = 0;
-let interactionRound = 0;
-
-let isRunning = false;
-let simulationTimer = null;
-
-let cooperationHistory = [];
-
-let currentOutcomes = {
-    cc: 0,
-    cd: 0,
-    dc: 0,
-    dd: 0
-};
+        const angle =
+            (
+                Math.PI * 2 *
+                i /
+                N_AGENTS
+            )
+            -
+            Math.PI / 2;
 
 
-let lastRematchChangedAgents = 0;
-let lastRematchStablePairs = 0;
+        const x =
+            centerX +
+            ring *
+            Math.cos(angle);
 
 
-/*
-    ============================================================
-    AGENT
-    ============================================================
-*/
+        const y =
+            centerY +
+            ring *
+            Math.sin(angle);
 
 
-class Agent {
-
-    constructor(id, x, y) {
-
-        this.id = id;
-
-        this.x = x;
-        this.y = y;
-
-        this.radius = 16;
-
-        this.action =
-            Math.random() < 0.5
-                ? COOPERATE
-                : DEFECT;
-
-        this.previousAction =
-            this.action;
-
-        this.reward = 0;
-        this.totalReward = 0;
-
-        this.partnerId = null;
-        this.previousPartnerId = null;
-
-        this.selectedSwitchAction = STAY;
-
-
-        /*
-            Browser state representation:
-
-            0 = own previous C, partner previous C
-            1 = own previous C, partner previous D
-            2 = own previous D, partner previous C
-            3 = own previous D, partner previous D
-        */
-
-        this.state = 0;
-
-
-        /*
-            Prisoner's Dilemma action values:
-
-            qValues[state][0] = cooperate
-            qValues[state][1] = defect
-        */
-
-        this.qValues = [
-            [0, 0],
-            [0, 0],
-            [0, 0],
-            [0, 0]
-        ];
-
-
-        /*
-            Hybrid stay-or-switch values:
-
-            switchQ[state][0] = stay
-            switchQ[state][1] = switch
-        */
-
-        this.switchQ = [
-            [0, 0],
-            [0, 0],
-            [0, 0],
-            [0, 0]
-        ];
-
+        agentPositions.push({
+            x,
+            y
+        });
     }
-
 }
 
 
-/*
-    ============================================================
-    CANVAS SIZE
-    ============================================================
-*/
+generateAgentPositions();
 
 
-function resizeCanvases() {
+/* ============================================================
+   DRAW NETWORK
+============================================================ */
 
-    resizeCanvasForDisplay(
-        canvas,
-        context
-    );
-
-    resizeCanvasForDisplay(
-        chartCanvas,
-        chartContext
-    );
-
-
-    positionAgentsInCircle();
-    drawSimulation();
-    drawChart();
-
-}
-
-
-function resizeCanvasForDisplay(
-    targetCanvas,
-    targetContext
+function drawNetwork(
+    svg,
+    model,
+    colour,
+    darkColour
 ) {
 
-    const rectangle =
-        targetCanvas.getBoundingClientRect();
+    svg.innerHTML = "";
 
-    const pixelRatio =
+
+    /*
+        Partnership lines first
+    */
+
+    for (
+        const pair of model.groups
+    ) {
+
+        const a =
+            agentPositions[pair[0]];
+
+        const b =
+            agentPositions[pair[1]];
+
+
+        const line =
+            document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "line"
+            );
+
+
+        line.setAttribute(
+            "x1",
+            a.x
+        );
+
+        line.setAttribute(
+            "y1",
+            a.y
+        );
+
+        line.setAttribute(
+            "x2",
+            b.x
+        );
+
+        line.setAttribute(
+            "y2",
+            b.y
+        );
+
+
+        line.setAttribute(
+            "class",
+            `edge ${model.type}`
+        );
+
+
+        svg.appendChild(line);
+    }
+
+
+    /*
+        Agents
+    */
+
+    for (
+        let i = 0;
+        i < N_AGENTS;
+        i++
+    ) {
+
+        const position =
+            agentPositions[i];
+
+        const cooperating =
+            model.actionsPD[i] === 0;
+
+
+        const group =
+            document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "g"
+            );
+
+
+        const circle =
+            document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "circle"
+            );
+
+
+        circle.setAttribute(
+            "cx",
+            position.x
+        );
+
+        circle.setAttribute(
+            "cy",
+            position.y
+        );
+
+        circle.setAttribute(
+            "r",
+            "19"
+        );
+
+
+        circle.setAttribute(
+            "fill",
+            cooperating
+                ? colour
+                : "#ffffff"
+        );
+
+
+        circle.setAttribute(
+            "stroke",
+            darkColour
+        );
+
+
+        circle.setAttribute(
+            "class",
+            "agent-circle"
+        );
+
+
+        const text =
+            document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "text"
+            );
+
+
+        text.setAttribute(
+            "x",
+            position.x
+        );
+
+        text.setAttribute(
+            "y",
+            position.y + 0.5
+        );
+
+
+        text.setAttribute(
+            "class",
+            cooperating
+                ?
+                "agent-text"
+                :
+                "agent-text defector-text"
+        );
+
+
+        text.textContent =
+            cooperating
+                ? "C"
+                : "D";
+
+
+        group.appendChild(circle);
+        group.appendChild(text);
+
+        svg.appendChild(group);
+    }
+}
+
+
+/* ============================================================
+   CANVAS CHART
+============================================================ */
+
+function prepareCanvas(canvas) {
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+    const ratio =
         window.devicePixelRatio || 1;
 
 
-    targetCanvas.width =
-        Math.max(
-            1,
-            Math.round(
-                rectangle.width
-                *
-                pixelRatio
-            )
-        );
+    canvas.width =
+        rect.width * ratio;
 
-    targetCanvas.height =
-        Math.max(
-            1,
-            Math.round(
-                rectangle.height
-                *
-                pixelRatio
-            )
-        );
+    canvas.height =
+        rect.height * ratio;
 
 
-    targetContext.setTransform(
-        pixelRatio,
+    const context =
+        canvas.getContext("2d");
+
+
+    context.setTransform(
+        ratio,
         0,
         0,
-        pixelRatio,
+        ratio,
         0,
         0
     );
 
-}
-
-
-function getCanvasSize() {
-
-    const rectangle =
-        canvas.getBoundingClientRect();
 
     return {
-        width: rectangle.width,
-        height: rectangle.height
+        context,
+        width: rect.width,
+        height: rect.height
     };
-
 }
 
 
-/*
-    ============================================================
-    INITIALISATION
-    ============================================================
-*/
-
-
-function initialiseSimulation() {
-
-    stopSimulation();
-
-    generation = 0;
-    interactionRound = 0;
-
-    cooperationHistory = [];
-
-    currentOutcomes = {
-        cc: 0,
-        cd: 0,
-        dc: 0,
-        dd: 0
-    };
-
-    lastRematchChangedAgents = 0;
-    lastRematchStablePairs = 0;
-
-
-    const population =
-        makePopulationEven(
-            Number(
-                populationInput.value
-            )
-        );
-
-
-    populationInput.value =
-        String(population);
-
-    populationOutput.textContent =
-        String(population);
-
-
-    agents = [];
-
-
-    const size =
-        getCanvasSize();
-
-    const centreX =
-        size.width / 2;
-
-    const centreY =
-        size.height / 2;
-
-    const circleRadius =
-        calculateAgentCircleRadius(
-            size.width,
-            size.height
-        );
-
-
-    for (
-        let index = 0;
-        index < population;
-        index += 1
-    ) {
-
-        const angle =
-            (
-                Math.PI
-                *
-                2
-                *
-                index
-            )
-            /
-            population;
-
-
-        const x =
-            centreX
-            +
-            Math.cos(angle)
-            *
-            circleRadius;
-
-        const y =
-            centreY
-            +
-            Math.sin(angle)
-            *
-            circleRadius;
-
-
-        agents.push(
-            new Agent(
-                index,
-                x,
-                y
-            )
-        );
-
-    }
-
-
-    pairAllAgentsRandomly();
-
-
-    cooperationHistory.push(
-        calculateCooperationRate()
-    );
-
-
-    updateControlDisplays();
-    updateModelDescription();
-    updateInterface();
-
-    drawSimulation();
-    drawChart();
-
-}
-
-
-function makePopulationEven(value) {
-
-    const rounded =
-        Math.round(value);
-
-    return rounded % 2 === 0
-        ? rounded
-        : rounded + 1;
-
-}
-
-
-function calculateAgentCircleRadius(
-    width,
-    height
-) {
-
-    const populationAdjustment =
-        agents.length > 50
-            ? 0.43
-            : 0.39;
-
-
-    return (
-        Math.min(
-            width,
-            height
-        )
-        *
-        populationAdjustment
-    );
-
-}
-
-
-function positionAgentsInCircle() {
-
-    if (agents.length === 0) {
-        return;
-    }
-
-
-    const size =
-        getCanvasSize();
-
-    const centreX =
-        size.width / 2;
-
-    const centreY =
-        size.height / 2;
-
-    const circleRadius =
-        calculateAgentCircleRadius(
-            size.width,
-            size.height
-        );
-
-
-    agents.forEach(
-        function positionAgent(agent, index) {
-
-            const angle =
-                (
-                    Math.PI
-                    *
-                    2
-                    *
-                    index
-                )
-                /
-                agents.length;
-
-
-            agent.x =
-                centreX
-                +
-                Math.cos(angle)
-                *
-                circleRadius;
-
-            agent.y =
-                centreY
-                +
-                Math.sin(angle)
-                *
-                circleRadius;
-
-
-            agent.radius =
-                agents.length > 70
-                    ? 9
-                    : agents.length > 40
-                        ? 12
-                        : 16;
-
-        }
-    );
-
-}
-
-
-/*
-    ============================================================
-    ARRAY UTILITIES
-    ============================================================
-*/
-
-
-function shuffleArray(array) {
-
-    const copy =
-        [...array];
-
-
-    for (
-        let index = copy.length - 1;
-        index > 0;
-        index -= 1
-    ) {
-
-        const randomIndex =
-            Math.floor(
-                Math.random()
-                *
-                (
-                    index
-                    +
-                    1
-                )
-            );
-
-
-        [
-            copy[index],
-            copy[randomIndex]
-        ]
-        =
-        [
-            copy[randomIndex],
-            copy[index]
-        ];
-
-    }
-
-
-    return copy;
-
-}
-
-
-/*
-    ============================================================
-    PAIR CREATION
-    ============================================================
-*/
-
-
-function createPair(
-    firstAgent,
-    secondAgent,
-    pairCollection = pairs
-) {
-
-    if (
-        !firstAgent
-        ||
-        !secondAgent
-        ||
-        firstAgent.id === secondAgent.id
-    ) {
-        return;
-    }
-
-
-    firstAgent.partnerId =
-        secondAgent.id;
-
-    secondAgent.partnerId =
-        firstAgent.id;
-
-
-    pairCollection.push([
-        firstAgent.id,
-        secondAgent.id
-    ]);
-
-}
-
-
-function pairAllAgentsRandomly() {
-
-    pairs = [];
-
-    pairSubsetRandomly(
-        agents,
-        pairs
-    );
-
-}
-
-
-function pairSubsetRandomly(
-    subset,
-    targetPairs
-) {
-
-    const shuffled =
-        shuffleArray(subset);
-
-
-    for (
-        let index = 0;
-        index < shuffled.length;
-        index += 2
-    ) {
-
-        if (!shuffled[index + 1]) {
-            break;
-        }
-
-
-        createPair(
-            shuffled[index],
-            shuffled[index + 1],
-            targetPairs
-        );
-
-    }
-
-}
-
-
-function pairSubsetAssortatively(
-    subset,
-    targetPairs
-) {
-
-    const cooperators =
-        shuffleArray(
-            subset.filter(
-                function selectCooperators(agent) {
-                    return (
-                        agent.previousAction
-                        ===
-                        COOPERATE
-                    );
-                }
-            )
-        );
-
-
-    const defectors =
-        shuffleArray(
-            subset.filter(
-                function selectDefectors(agent) {
-                    return (
-                        agent.previousAction
-                        ===
-                        DEFECT
-                    );
-                }
-            )
-        );
-
-
-    const unmatched = [];
-
-
-    pairWithinBehaviourGroup(
-        cooperators,
-        unmatched,
-        targetPairs
-    );
-
-    pairWithinBehaviourGroup(
-        defectors,
-        unmatched,
-        targetPairs
-    );
-
-
-    if (unmatched.length > 1) {
-
-        pairSubsetRandomly(
-            unmatched,
-            targetPairs
-        );
-
-    }
-
-}
-
-
-function pairWithinBehaviourGroup(
-    group,
-    unmatched,
-    targetPairs
-) {
-
-    for (
-        let index = 0;
-        index < group.length;
-        index += 2
-    ) {
-
-        if (!group[index + 1]) {
-
-            unmatched.push(
-                group[index]
-            );
-
-            continue;
-
-        }
-
-
-        createPair(
-            group[index],
-            group[index + 1],
-            targetPairs
-        );
-
-    }
-
-}
-
-
-/*
-    ============================================================
-    ASSORTATIVE REMATCHING
-    ============================================================
-*/
-
-
-function createRematchedPairs(subset) {
-
-    const assortativity =
-        Number(
-            assortativityInput.value
-        );
-
-
-    const generatedPairs = [];
-
-
-    if (
-        Math.random()
-        <
-        assortativity
-    ) {
-
-        pairSubsetAssortatively(
-            subset,
-            generatedPairs
-        );
-
-    } else {
-
-        pairSubsetRandomly(
-            subset,
-            generatedPairs
-        );
-
-    }
-
-
-    return generatedPairs;
-
-}
-
-
-/*
-    ============================================================
-    BASELINE REMATCHING
-    ============================================================
-*/
-
-
-function rematchBaseline() {
-
-    preservePreviousPartners();
-
-
-    const newPairs =
-        createRematchedPairs(
-            agents
-        );
-
-
-    pairs =
-        newPairs;
-
-
-    calculateRematchingStatistics();
-
-}
-
-
-/*
-    ============================================================
-    HYBRID PARTNER PROCESS
-    ============================================================
-*/
-
-
-function rematchHybrid() {
-
-    preservePreviousPartners();
-
-
-    const retainedPairs = [];
-    const rematchingPool = [];
-
-
-    pairs.forEach(
-        function evaluateCurrentPair(pair) {
-
-            const firstAgent =
-                agents[pair[0]];
-
-            const secondAgent =
-                agents[pair[1]];
-
-
-            const firstDecision =
-                chooseSwitchAction(
-                    firstAgent
-                );
-
-            const secondDecision =
-                chooseSwitchAction(
-                    secondAgent
-                );
-
-
-            firstAgent.selectedSwitchAction =
-                firstDecision;
-
-            secondAgent.selectedSwitchAction =
-                secondDecision;
-
-
-            if (
-                firstDecision === STAY
-                &&
-                secondDecision === STAY
-            ) {
-
-                createPair(
-                    firstAgent,
-                    secondAgent,
-                    retainedPairs
-                );
-
-            } else {
-
-                rematchingPool.push(
-                    firstAgent,
-                    secondAgent
-                );
-
-            }
-
-        }
-    );
-
-
-    const rematchedPairs =
-        createRematchedPairs(
-            rematchingPool
-        );
-
-
-    pairs = [
-        ...retainedPairs,
-        ...rematchedPairs
-    ];
-
-
-    calculateRematchingStatistics();
-
-}
-
-
-function preservePreviousPartners() {
-
-    agents.forEach(
-        function preservePartner(agent) {
-
-            agent.previousPartnerId =
-                agent.partnerId;
-
-        }
-    );
-
-}
-
-
-function calculateRematchingStatistics() {
-
-    lastRematchChangedAgents =
-        agents.filter(
-            function didAgentChangePartner(agent) {
-
-                return (
-                    agent.previousPartnerId !== null
-                    &&
-                    agent.previousPartnerId
-                    !==
-                    agent.partnerId
-                );
-
-            }
-        ).length;
-
-
-    lastRematchStablePairs =
-        pairs.filter(
-            function isRetainedPair(pair) {
-
-                const firstAgent =
-                    agents[pair[0]];
-
-                const secondAgent =
-                    agents[pair[1]];
-
-
-                return (
-                    firstAgent.previousPartnerId
-                    ===
-                    secondAgent.id
-                    &&
-                    secondAgent.previousPartnerId
-                    ===
-                    firstAgent.id
-                );
-
-            }
-        ).length;
-
-}
-
-
-/*
-    ============================================================
-    STATE AND ACTION SELECTION
-    ============================================================
-*/
-
-
-function determineState(
-    ownPreviousAction,
-    partnerPreviousAction
-) {
-
-    if (
-        ownPreviousAction === COOPERATE
-        &&
-        partnerPreviousAction === COOPERATE
-    ) {
-        return 0;
-    }
-
-
-    if (
-        ownPreviousAction === COOPERATE
-        &&
-        partnerPreviousAction === DEFECT
-    ) {
-        return 1;
-    }
-
-
-    if (
-        ownPreviousAction === DEFECT
-        &&
-        partnerPreviousAction === COOPERATE
-    ) {
-        return 2;
-    }
-
-
-    return 3;
-
-}
-
-
-function boltzmannAction(
+function drawChart(
+    canvas,
     values,
-    temperature
+    colour
 ) {
 
-    const safeTemperature =
-        Math.max(
-            temperature,
-            0.01
-        );
+    const {
+        context: ctx,
+        width,
+        height
+    } = prepareCanvas(canvas);
 
 
-    const maximum =
-        Math.max(
-            values[0],
-            values[1]
-        );
-
-
-    const firstExponent =
-        Math.exp(
-            (
-                values[0]
-                -
-                maximum
-            )
-            /
-            safeTemperature
-        );
-
-
-    const secondExponent =
-        Math.exp(
-            (
-                values[1]
-                -
-                maximum
-            )
-            /
-            safeTemperature
-        );
-
-
-    const total =
-        firstExponent
-        +
-        secondExponent;
-
-
-    if (
-        !Number.isFinite(total)
-        ||
-        total <= 0
-    ) {
-
-        return (
-            Math.random() < 0.5
-                ? 0
-                : 1
-        );
-
-    }
-
-
-    const probabilityFirst =
-        firstExponent
-        /
-        total;
-
-
-    return (
-        Math.random()
-        <
-        probabilityFirst
-    )
-        ? 0
-        : 1;
-
-}
-
-
-function choosePrisonersDilemmaAction(agent) {
-
-    return boltzmannAction(
-        agent.qValues[
-            agent.state
-        ],
-        Number(
-            temperatureInput.value
-        )
-    );
-
-}
-
-
-function chooseSwitchAction(agent) {
-
-    return boltzmannAction(
-        agent.switchQ[
-            agent.state
-        ],
-        Number(
-            temperatureInput.value
-        )
-    );
-
-}
-
-
-/*
-    ============================================================
-    PAYOFFS
-    ============================================================
-*/
-
-
-function getRewards(
-    firstAction,
-    secondAction
-) {
-
-    if (
-        firstAction === COOPERATE
-        &&
-        secondAction === COOPERATE
-    ) {
-
-        return [3, 3];
-
-    }
-
-
-    if (
-        firstAction === COOPERATE
-        &&
-        secondAction === DEFECT
-    ) {
-
-        return [0, 5];
-
-    }
-
-
-    if (
-        firstAction === DEFECT
-        &&
-        secondAction === COOPERATE
-    ) {
-
-        return [5, 0];
-
-    }
-
-
-    return [1, 1];
-
-}
-
-
-/*
-    ============================================================
-    Q-LEARNING UPDATES
-    ============================================================
-*/
-
-
-function updateActionQValue(
-    agent,
-    previousState,
-    action,
-    reward,
-    nextState
-) {
-
-    const learningRate =
-        Number(
-            learningRateInput.value
-        );
-
-    const discountFactor =
-        Number(
-            discountInput.value
-        );
-
-
-    const currentValue =
-        agent.qValues[
-            previousState
-        ][action];
-
-
-    const nextMaximum =
-        Math.max(
-            agent.qValues[
-                nextState
-            ][COOPERATE],
-            agent.qValues[
-                nextState
-            ][DEFECT]
-        );
-
-
-    const target =
-        reward
-        +
-        discountFactor
-        *
-        nextMaximum;
-
-
-    agent.qValues[
-        previousState
-    ][action]
-    =
-    currentValue
-    +
-    learningRate
-    *
-    (
-        target
-        -
-        currentValue
-    );
-
-}
-
-
-function updateSwitchQValue(
-    agent,
-    previousState,
-    switchAction
-) {
-
-    const learningRate =
-        Number(
-            learningRateInput.value
-        );
-
-    const discountFactor =
-        Number(
-            discountInput.value
-        );
-
-
-    /*
-        Browser demonstration reward for the partner decision.
-
-        Retaining a productive interaction receives the observed
-        reward. Leaving a low-reward interaction is represented as
-        comparatively useful.
-
-        This educational approximation is not presented as the
-        complete dissertation switching update.
-    */
-
-    let switchReward;
-
-
-    if (switchAction === STAY) {
-
-        switchReward =
-            agent.reward;
-
-    } else {
-
-        switchReward =
-            Math.max(
-                0,
-                3 - agent.reward
-            );
-
-    }
-
-
-    const currentValue =
-        agent.switchQ[
-            previousState
-        ][switchAction];
-
-
-    const nextMaximum =
-        Math.max(
-            agent.switchQ[
-                agent.state
-            ][STAY],
-            agent.switchQ[
-                agent.state
-            ][SWITCH]
-        );
-
-
-    const target =
-        switchReward
-        +
-        discountFactor
-        *
-        nextMaximum;
-
-
-    agent.switchQ[
-        previousState
-    ][switchAction]
-    =
-    currentValue
-    +
-    learningRate
-    *
-    (
-        target
-        -
-        currentValue
-    );
-
-}
-
-
-/*
-    ============================================================
-    ONE DEMONSTRATION STEP
-    ============================================================
-*/
-
-
-function runGeneration() {
-
-    generation += 1;
-    interactionRound += 1;
-
-
-    currentOutcomes = {
-        cc: 0,
-        cd: 0,
-        dc: 0,
-        dd: 0
-    };
-
-
-    agents.forEach(
-        function preservePreviousAction(agent) {
-
-            agent.previousAction =
-                agent.action;
-
-        }
-    );
-
-
-    pairs.forEach(
-        function runPairInteraction(pair) {
-
-            const firstAgent =
-                agents[pair[0]];
-
-            const secondAgent =
-                agents[pair[1]];
-
-
-            const firstPreviousState =
-                determineState(
-                    firstAgent.previousAction,
-                    secondAgent.previousAction
-                );
-
-
-            const secondPreviousState =
-                determineState(
-                    secondAgent.previousAction,
-                    firstAgent.previousAction
-                );
-
-
-            firstAgent.state =
-                firstPreviousState;
-
-            secondAgent.state =
-                secondPreviousState;
-
-
-            const firstAction =
-                choosePrisonersDilemmaAction(
-                    firstAgent
-                );
-
-
-            const secondAction =
-                choosePrisonersDilemmaAction(
-                    secondAgent
-                );
-
-
-            firstAgent.action =
-                firstAction;
-
-            secondAgent.action =
-                secondAction;
-
-
-            const rewards =
-                getRewards(
-                    firstAction,
-                    secondAction
-                );
-
-
-            firstAgent.reward =
-                rewards[0];
-
-            secondAgent.reward =
-                rewards[1];
-
-
-            firstAgent.totalReward +=
-                firstAgent.reward;
-
-            secondAgent.totalReward +=
-                secondAgent.reward;
-
-
-            updateOutcomeCounts(
-                firstAction,
-                secondAction
-            );
-
-
-            const firstNextState =
-                determineState(
-                    firstAction,
-                    secondAction
-                );
-
-
-            const secondNextState =
-                determineState(
-                    secondAction,
-                    firstAction
-                );
-
-
-            updateActionQValue(
-                firstAgent,
-                firstPreviousState,
-                firstAction,
-                firstAgent.reward,
-                firstNextState
-            );
-
-
-            updateActionQValue(
-                secondAgent,
-                secondPreviousState,
-                secondAction,
-                secondAgent.reward,
-                secondNextState
-            );
-
-
-            firstAgent.state =
-                firstNextState;
-
-            secondAgent.state =
-                secondNextState;
-
-        }
-    );
-
-
-    const roundsPerInteraction =
-        Number(
-            roundsInput.value
-        );
-
-
-    if (
-        interactionRound
-        >=
-        roundsPerInteraction
-    ) {
-
-        interactionRound = 0;
-
-
-        if (
-            modelSelect.value
-            ===
-            "hybrid"
-        ) {
-
-            /*
-                Select and update partner actions before rematching.
-            */
-
-            agents.forEach(
-                function prepareSwitchDecision(agent) {
-
-                    agent.selectedSwitchAction =
-                        chooseSwitchAction(
-                            agent
-                        );
-
-                }
-            );
-
-
-            agents.forEach(
-                function learnSwitchDecision(agent) {
-
-                    updateSwitchQValue(
-                        agent,
-                        agent.state,
-                        agent.selectedSwitchAction
-                    );
-
-                }
-            );
-
-
-            rematchHybrid();
-
-        } else {
-
-            rematchBaseline();
-
-        }
-
-    }
-
-
-    cooperationHistory.push(
-        calculateCooperationRate()
-    );
-
-
-    if (
-        cooperationHistory.length
-        >
-        120
-    ) {
-
-        cooperationHistory.shift();
-
-    }
-
-
-    updateInterface();
-    drawSimulation();
-    drawChart();
-
-}
-
-
-/*
-    ============================================================
-    OUTCOME COUNTS
-    ============================================================
-*/
-
-
-function updateOutcomeCounts(
-    firstAction,
-    secondAction
-) {
-
-    if (
-        firstAction === COOPERATE
-        &&
-        secondAction === COOPERATE
-    ) {
-
-        currentOutcomes.cc += 1;
-        return;
-
-    }
-
-
-    if (
-        firstAction === COOPERATE
-        &&
-        secondAction === DEFECT
-    ) {
-
-        currentOutcomes.cd += 1;
-        return;
-
-    }
-
-
-    if (
-        firstAction === DEFECT
-        &&
-        secondAction === COOPERATE
-    ) {
-
-        currentOutcomes.dc += 1;
-        return;
-
-    }
-
-
-    currentOutcomes.dd += 1;
-
-}
-
-
-/*
-    ============================================================
-    METRICS
-    ============================================================
-*/
-
-
-function calculateCooperationRate() {
-
-    if (agents.length === 0) {
-        return 0;
-    }
-
-
-    const cooperativeAgents =
-        agents.filter(
-            function countCooperators(agent) {
-
-                return (
-                    agent.action
-                    ===
-                    COOPERATE
-                );
-
-            }
-        ).length;
-
-
-    return (
-        cooperativeAgents
-        /
-        agents.length
-    );
-
-}
-
-
-function calculateMeanReward() {
-
-    if (agents.length === 0) {
-        return 0;
-    }
-
-
-    const total =
-        agents.reduce(
-            function sumReward(sum, agent) {
-
-                return (
-                    sum
-                    +
-                    agent.reward
-                );
-
-            },
-            0
-        );
-
-
-    return (
-        total
-        /
-        agents.length
-    );
-
-}
-
-
-function calculatePartnerChangeRate() {
-
-    if (agents.length === 0) {
-        return 0;
-    }
-
-
-    return (
-        lastRematchChangedAgents
-        /
-        agents.length
-    );
-
-}
-
-
-/*
-    ============================================================
-    INTERFACE
-    ============================================================
-*/
-
-
-function updateInterface() {
-
-    generationValue.textContent =
-        String(generation);
-
-
-    cooperationMetric.textContent =
-        (
-            calculateCooperationRate()
-            *
-            100
-        ).toFixed(0)
-        +
-        "%";
-
-
-    rewardMetric.textContent =
-        calculateMeanReward()
-            .toFixed(2);
-
-
-    switchingMetric.textContent =
-        (
-            calculatePartnerChangeRate()
-            *
-            100
-        ).toFixed(0)
-        +
-        "%";
-
-
-    stablePairsMetric.textContent =
-        String(
-            lastRematchStablePairs
-        );
-
-
-    updateOutcomeInterface();
-
-}
-
-
-function updateOutcomeInterface() {
-
-    const totalPairs =
-        Math.max(
-            currentOutcomes.cc
-            +
-            currentOutcomes.cd
-            +
-            currentOutcomes.dc
-            +
-            currentOutcomes.dd,
-            1
-        );
-
-
-    ccValue.textContent =
-        String(
-            currentOutcomes.cc
-        );
-
-    cdValue.textContent =
-        String(
-            currentOutcomes.cd
-        );
-
-    dcValue.textContent =
-        String(
-            currentOutcomes.dc
-        );
-
-    ddValue.textContent =
-        String(
-            currentOutcomes.dd
-        );
-
-
-    setOutcomeBarWidth(
-        ccBar,
-        currentOutcomes.cc,
-        totalPairs
-    );
-
-    setOutcomeBarWidth(
-        cdBar,
-        currentOutcomes.cd,
-        totalPairs
-    );
-
-    setOutcomeBarWidth(
-        dcBar,
-        currentOutcomes.dc,
-        totalPairs
-    );
-
-    setOutcomeBarWidth(
-        ddBar,
-        currentOutcomes.dd,
-        totalPairs
-    );
-
-}
-
-
-function setOutcomeBarWidth(
-    element,
-    value,
-    total
-) {
-
-    element.style.width =
-        (
-            value
-            /
-            total
-            *
-            100
-        )
-        +
-        "%";
-
-}
-
-
-/*
-    ============================================================
-    SIMULATION DRAWING
-    ============================================================
-*/
-
-
-function drawSimulation() {
-
-    const size =
-        getCanvasSize();
-
-
-    context.clearRect(
-        0,
-        0,
-        size.width,
-        size.height
-    );
-
-
-    drawBackgroundPattern(
-        size.width,
-        size.height
-    );
-
-
-    drawInteractionRing(
-        size.width,
-        size.height
-    );
-
-
-    pairs.forEach(
-        function drawCurrentPair(pair) {
-
-            const firstAgent =
-                agents[pair[0]];
-
-            const secondAgent =
-                agents[pair[1]];
-
-
-            if (
-                firstAgent
-                &&
-                secondAgent
-            ) {
-
-                drawConnection(
-                    firstAgent,
-                    secondAgent
-                );
-
-            }
-
-        }
-    );
-
-
-    agents.forEach(
-        function drawAgent(agent) {
-
-            drawSingleAgent(
-                agent
-            );
-
-        }
-    );
-
-}
-
-
-function drawBackgroundPattern(
-    width,
-    height
-) {
-
-    context.save();
-
-
-    context.fillStyle =
-        "rgba(123, 111, 214, 0.055)";
-
-
-    for (
-        let x = 25;
-        x < width;
-        x += 39
-    ) {
-
-        for (
-            let y = 25;
-            y < height;
-            y += 39
-        ) {
-
-            context.beginPath();
-
-            context.arc(
-                x,
-                y,
-                1.15,
-                0,
-                Math.PI * 2
-            );
-
-            context.fill();
-
-        }
-
-    }
-
-
-    context.restore();
-
-}
-
-
-function drawInteractionRing(
-    width,
-    height
-) {
-
-    context.save();
-
-
-    const centreX =
-        width / 2;
-
-    const centreY =
-        height / 2;
-
-    const radius =
-        calculateAgentCircleRadius(
-            width,
-            height
-        );
-
-
-    context.beginPath();
-
-    context.arc(
-        centreX,
-        centreY,
-        radius,
-        0,
-        Math.PI * 2
-    );
-
-
-    context.strokeStyle =
-        "rgba(123, 111, 214, 0.10)";
-
-    context.lineWidth = 1;
-
-    context.setLineDash([
-        4,
-        7
-    ]);
-
-    context.stroke();
-
-    context.restore();
-
-}
-
-
-function drawConnection(
-    firstAgent,
-    secondAgent
-) {
-
-    context.save();
-
-
-    context.beginPath();
-
-    context.moveTo(
-        firstAgent.x,
-        firstAgent.y
-    );
-
-    context.lineTo(
-        secondAgent.x,
-        secondAgent.y
-    );
-
-
-    const bothCooperate =
-        firstAgent.action === COOPERATE
-        &&
-        secondAgent.action === COOPERATE;
-
-
-    const bothDefect =
-        firstAgent.action === DEFECT
-        &&
-        secondAgent.action === DEFECT;
-
-
-    if (bothCooperate) {
-
-        context.strokeStyle =
-            "rgba(123, 111, 214, 0.70)";
-
-        context.lineWidth = 3;
-
-    } else if (bothDefect) {
-
-        context.strokeStyle =
-            "rgba(192, 96, 130, 0.60)";
-
-        context.lineWidth = 2.3;
-
-    } else {
-
-        context.strokeStyle =
-            CONNECTION_COLOUR;
-
-        context.lineWidth = 1.5;
-
-    }
-
-
-    context.stroke();
-
-    context.restore();
-
-}
-
-
-function drawSingleAgent(agent) {
-
-    context.save();
-
-
-    const outerRadius =
-        agent.radius + 4;
-
-
-    context.beginPath();
-
-    context.arc(
-        agent.x,
-        agent.y,
-        outerRadius,
-        0,
-        Math.PI * 2
-    );
-
-
-    context.fillStyle =
-        agent.action === COOPERATE
-            ? "rgba(123, 111, 214, 0.15)"
-            : "rgba(192, 96, 130, 0.15)";
-
-
-    context.fill();
-
-
-    context.beginPath();
-
-    context.arc(
-        agent.x,
-        agent.y,
-        agent.radius,
-        0,
-        Math.PI * 2
-    );
-
-
-    context.fillStyle =
-        agent.action === COOPERATE
-            ? COOPERATE_COLOUR
-            : DEFECT_COLOUR;
-
-
-    context.shadowColor =
-        "rgba(44, 35, 57, 0.18)";
-
-    context.shadowBlur =
-        agents.length > 50
-            ? 5
-            : 11;
-
-
-    context.fill();
-
-    context.shadowBlur = 0;
-
-
-    if (
-        agent.radius
-        >=
-        12
-    ) {
-
-        context.fillStyle =
-            "#ffffff";
-
-        context.font =
-            agent.radius >= 15
-                ? "800 11px Inter, sans-serif"
-                : "800 9px Inter, sans-serif";
-
-        context.textAlign =
-            "center";
-
-        context.textBaseline =
-            "middle";
-
-
-        context.fillText(
-            agent.action === COOPERATE
-                ? "C"
-                : "D",
-            agent.x,
-            agent.y
-        );
-
-    }
-
-
-    if (
-        generation > 0
-        &&
-        agents.length <= 40
-    ) {
-
-        context.fillStyle =
-            TEXT_COLOUR;
-
-        context.font =
-            "650 8px Inter, sans-serif";
-
-        context.textAlign =
-            "center";
-
-        context.fillText(
-            "+" + agent.reward,
-            agent.x,
-            agent.y - agent.radius - 10
-        );
-
-    }
-
-
-    context.restore();
-
-}
-
-
-/*
-    ============================================================
-    CHART
-    ============================================================
-*/
-
-
-function drawChart() {
-
-    const rectangle =
-        chartCanvas.getBoundingClientRect();
-
-    const width =
-        rectangle.width;
-
-    const height =
-        rectangle.height;
-
-
-    chartContext.clearRect(
+    ctx.clearRect(
         0,
         0,
         width,
@@ -2294,736 +1325,567 @@ function drawChart() {
 
 
     const padding = {
-        top: 20,
-        right: 18,
-        bottom: 33,
-        left: 43
+        left: 34,
+        right: 10,
+        top: 9,
+        bottom: 23
     };
 
 
     const chartWidth =
-        Math.max(
-            1,
-            width
-            -
-            padding.left
-            -
-            padding.right
-        );
+        width -
+        padding.left -
+        padding.right;
 
 
     const chartHeight =
-        Math.max(
-            1,
-            height
-            -
-            padding.top
-            -
-            padding.bottom
+        height -
+        padding.top -
+        padding.bottom;
+
+
+    /*
+        Grid
+    */
+
+    ctx.strokeStyle =
+        "#eceaf0";
+
+    ctx.lineWidth = 1;
+
+    ctx.fillStyle =
+        "#8c8993";
+
+    ctx.font =
+        "10px sans-serif";
+
+
+    for (
+        let tick = 0;
+        tick <= 4;
+        tick++
+    ) {
+
+        const value =
+            tick / 4;
+
+
+        const y =
+            padding.top +
+            chartHeight *
+            (1 - value);
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            padding.left,
+            y
         );
 
+        ctx.lineTo(
+            width -
+            padding.right,
+            y
+        );
 
-    drawChartGrid(
-        padding,
-        chartWidth,
-        chartHeight
+        ctx.stroke();
+
+
+        ctx.fillText(
+            value.toFixed(2),
+            2,
+            y + 3
+        );
+    }
+
+
+    /*
+        Axes
+    */
+
+    ctx.strokeStyle =
+        "#c9c6d0";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        padding.left,
+        padding.top
     );
+
+    ctx.lineTo(
+        padding.left,
+        height -
+        padding.bottom
+    );
+
+    ctx.lineTo(
+        width -
+        padding.right,
+        height -
+        padding.bottom
+    );
+
+    ctx.stroke();
 
 
     if (
-        cooperationHistory.length
-        <
-        2
+        values.length < 2
     ) {
+
+        ctx.fillStyle =
+            "#a5a2ab";
+
+        ctx.font =
+            "12px sans-serif";
+
+        ctx.fillText(
+            "Run the simulation to generate a trajectory.",
+            padding.left + 13,
+            padding.top + 25
+        );
+
         return;
     }
 
 
-    const modelColour =
-        modelSelect.value === "baseline"
-            ? BASELINE_COLOUR
-            : HYBRID_COLOUR;
+    /*
+        Cooperation trajectory
+    */
+
+    ctx.strokeStyle =
+        colour;
+
+    ctx.lineWidth = 2.5;
+
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
 
 
-    const points =
-        cooperationHistory.map(
-            function createPoint(value, index) {
-
-                return {
-                    x:
-                        padding.left
-                        +
-                        (
-                            index
-                            /
-                            (
-                                cooperationHistory.length
-                                -
-                                1
-                            )
-                        )
-                        *
-                        chartWidth,
-
-                    y:
-                        padding.top
-                        +
-                        (
-                            1
-                            -
-                            value
-                        )
-                        *
-                        chartHeight
-                };
-
-            }
-        );
-
-
-    chartContext.save();
-
-    chartContext.beginPath();
-
-
-    points.forEach(
-        function drawPoint(point, index) {
-
-            if (index === 0) {
-
-                chartContext.moveTo(
-                    point.x,
-                    point.y
-                );
-
-            } else {
-
-                chartContext.lineTo(
-                    point.x,
-                    point.y
-                );
-
-            }
-
-        }
-    );
-
-
-    chartContext.strokeStyle =
-        modelColour;
-
-    chartContext.lineWidth = 3;
-
-    chartContext.lineJoin =
-        "round";
-
-    chartContext.lineCap =
-        "round";
-
-    chartContext.stroke();
-
-
-    const gradient =
-        chartContext.createLinearGradient(
-            0,
-            padding.top,
-            0,
-            padding.top
-            +
-            chartHeight
-        );
-
-
-    if (
-        modelSelect.value
-        ===
-        "baseline"
-    ) {
-
-        gradient.addColorStop(
-            0,
-            "rgba(192, 96, 130, 0.23)"
-        );
-
-        gradient.addColorStop(
-            1,
-            "rgba(192, 96, 130, 0)"
-        );
-
-    } else {
-
-        gradient.addColorStop(
-            0,
-            "rgba(123, 111, 214, 0.23)"
-        );
-
-        gradient.addColorStop(
-            1,
-            "rgba(123, 111, 214, 0)"
-        );
-
-    }
-
-
-    chartContext.lineTo(
-        padding.left
-        +
-        chartWidth,
-        padding.top
-        +
-        chartHeight
-    );
-
-
-    chartContext.lineTo(
-        padding.left,
-        padding.top
-        +
-        chartHeight
-    );
-
-
-    chartContext.closePath();
-
-    chartContext.fillStyle =
-        gradient;
-
-    chartContext.fill();
-
-    chartContext.restore();
-
-}
-
-
-function drawChartGrid(
-    padding,
-    chartWidth,
-    chartHeight
-) {
-
-    chartContext.save();
-
-
-    chartContext.font =
-        "11px Inter, sans-serif";
-
-    chartContext.fillStyle =
-        "#827b88";
-
-    chartContext.strokeStyle =
-        "rgba(222, 216, 226, 0.90)";
-
-    chartContext.lineWidth = 1;
-
-
-    const values = [
-        0,
-        0.25,
-        0.5,
-        0.75,
-        1
-    ];
+    ctx.beginPath();
 
 
     values.forEach(
-        function drawGridLine(value) {
+        (value, index) => {
+
+            const x =
+                padding.left +
+                (
+                    index /
+                    (values.length - 1)
+                )
+                *
+                chartWidth;
+
 
             const y =
-                padding.top
-                +
+                padding.top +
                 (
-                    1
-                    -
-                    value
+                    1 -
+                    clamp(value, 0, 1)
                 )
                 *
                 chartHeight;
 
 
-            chartContext.beginPath();
+            if (
+                index === 0
+            ) {
 
-            chartContext.moveTo(
-                padding.left,
-                y
-            );
+                ctx.moveTo(
+                    x,
+                    y
+                );
 
-            chartContext.lineTo(
-                padding.left
-                +
-                chartWidth,
-                y
-            );
+            } else {
 
-            chartContext.stroke();
-
-
-            chartContext.textAlign =
-                "right";
-
-
-            chartContext.fillText(
-                Math.round(
-                    value
-                    *
-                    100
-                )
-                +
-                "%",
-                padding.left - 8,
-                y + 4
-            );
-
+                ctx.lineTo(
+                    x,
+                    y
+                );
+            }
         }
     );
 
 
-    chartContext.textAlign =
-        "left";
-
-    chartContext.fillText(
-        "Earlier",
-        padding.left,
-        padding.top
-        +
-        chartHeight
-        +
-        23
-    );
-
-
-    chartContext.textAlign =
-        "right";
-
-    chartContext.fillText(
-        "Current",
-        padding.left
-        +
-        chartWidth,
-        padding.top
-        +
-        chartHeight
-        +
-        23
-    );
-
-
-    chartContext.restore();
-
+    ctx.stroke();
 }
 
 
-/*
-    ============================================================
-    RUN, PAUSE AND SPEED
-    ============================================================
-*/
+/* ============================================================
+   METRICS
+============================================================ */
+
+function updateMetrics() {
+
+    document
+        .getElementById(
+            "baselineIteration"
+        )
+        .textContent =
+            baseline.iteration
+                .toLocaleString();
 
 
-function startSimulation() {
+    document
+        .getElementById(
+            "hybridIteration"
+        )
+        .textContent =
+            hybrid.iteration
+                .toLocaleString();
 
-    if (isRunning) {
 
-        stopSimulation();
+    document
+        .getElementById(
+            "baselineCooperation"
+        )
+        .textContent =
+            baseline.iteration === 0
+                ? "—"
+                : percentage(
+                    baseline.lastCooperation
+                );
+
+
+    document
+        .getElementById(
+            "hybridCooperation"
+        )
+        .textContent =
+            hybrid.iteration === 0
+                ? "—"
+                : percentage(
+                    hybrid.lastCooperation
+                );
+
+
+    document
+        .getElementById(
+            "baselineCooperators"
+        )
+        .textContent =
+            baseline.getCooperatorCount() +
+            " / " +
+            N_AGENTS;
+
+
+    document
+        .getElementById(
+            "hybridCooperators"
+        )
+        .textContent =
+            hybrid.getCooperatorCount() +
+            " / " +
+            N_AGENTS;
+
+
+    document
+        .getElementById(
+            "baselineSwitching"
+        )
+        .textContent =
+            "100%";
+
+
+    document
+        .getElementById(
+            "hybridSwitching"
+        )
+        .textContent =
+            hybrid.iteration === 0
+                ? "—"
+                : percentage(
+                    hybrid.lastSwitchRate
+                );
+}
+
+
+/* ============================================================
+   RENDER EVERYTHING
+============================================================ */
+
+function render() {
+
+    drawNetwork(
+        baselineNetwork,
+        baseline,
+        BASELINE_COLOUR,
+        BASELINE_DARK
+    );
+
+
+    drawNetwork(
+        hybridNetwork,
+        hybrid,
+        HYBRID_COLOUR,
+        HYBRID_DARK
+    );
+
+
+    drawChart(
+        baselineChart,
+        baseline.history,
+        BASELINE_COLOUR
+    );
+
+
+    drawChart(
+        hybridChart,
+        hybrid.history,
+        HYBRID_COLOUR
+    );
+
+
+    updateMetrics();
+}
+
+
+/* ============================================================
+   RUN LOOP
+============================================================ */
+
+let running = false;
+let animationFrame = null;
+let lastFrame = 0;
+
+
+function simulationLoop(timestamp) {
+
+    if (!running) {
         return;
-
     }
 
 
-    isRunning = true;
-
-    runButton.textContent =
-        "Pause";
-
-    statusText.textContent =
-        "Running";
-
-    statusDot.classList.add(
-        "running"
-    );
-
-
-    scheduleNextGeneration();
-
-}
-
-
-function scheduleNextGeneration() {
-
-    if (!isRunning) {
-        return;
-    }
-
-
-    runGeneration();
-
-
-    const speed =
-        Number(
-            speedInput.value
-        );
-
-
-    const interval =
-        1120
-        -
-        speed
-        *
-        190;
-
-
-    simulationTimer =
-        window.setTimeout(
-            scheduleNextGeneration,
-            Math.max(
-                interval,
-                140
-            )
-        );
-
-}
-
-
-function stopSimulation() {
-
-    isRunning = false;
-
-    runButton.textContent =
-        "Run";
-
-
-    statusText.textContent =
-        generation === 0
-            ? "Ready"
-            : "Paused";
-
-
-    statusDot.classList.remove(
-        "running"
-    );
-
-
-    if (simulationTimer !== null) {
-
-        window.clearTimeout(
-            simulationTimer
-        );
-
-        simulationTimer = null;
-
-    }
-
-}
-
-
-/*
-    ============================================================
-    CONTROL DISPLAY
-    ============================================================
-*/
-
-
-function updateControlDisplays() {
-
-    populationOutput.textContent =
-        populationInput.value;
-
-
-    assortativityOutput.textContent =
-        Number(
-            assortativityInput.value
-        ).toFixed(2);
-
-
-    learningRateOutput.textContent =
-        Number(
-            learningRateInput.value
-        ).toFixed(2);
-
-
-    discountOutput.textContent =
-        Number(
-            discountInput.value
-        ).toFixed(2);
-
-
-    temperatureOutput.textContent =
-        Number(
-            temperatureInput.value
-        ).toFixed(2);
-
-
-    roundsOutput.textContent =
-        roundsInput.value;
-
-
-    speedOutput.textContent =
-        speedInput.value
-        +
-        "×";
-
-
-    canvasAssortativity.textContent =
-        "m = "
-        +
-        Number(
-            assortativityInput.value
-        ).toFixed(2);
-
-}
-
-
-function updateModelDescription() {
+    /*
+        Limit browser visual refresh rate
+        while multiple model iterations
+        can happen per frame.
+    */
 
     if (
-        modelSelect.value
-        ===
-        "baseline"
+        timestamp - lastFrame >= 35
     ) {
 
-        modelExplanation.textContent =
-            "Agents learn Prisoner's Dilemma actions but do not learn a separate stay-or-switch policy. Rematching is random with probability 1 − m and assortative with probability m.";
+        lastFrame = timestamp;
 
-        chartModelLabel.textContent =
-            "Baseline";
 
-        chartModelLabel.style.color =
-            "#9f4968";
+        const m =
+            Number(mSlider.value);
 
-        chartModelLabel.style.background =
-            "#f8e7ed";
+        const learningRate =
+            Number(lrSlider.value);
 
-        canvasModelName.textContent =
-            "Baseline model";
+        const tau =
+            Number(tauSlider.value);
 
-    } else {
+        const steps =
+            Number(speedSlider.value);
 
-        modelExplanation.textContent =
-            "Agents learn both Prisoner's Dilemma actions and whether to remain with or leave their current partner. Agents entering the pool are rematched randomly or assortatively.";
 
-        chartModelLabel.textContent =
-            "Hybrid";
+        for (
+            let s = 0;
+            s < steps;
+            s++
+        ) {
 
-        chartModelLabel.style.color =
-            "#5d51bd";
+            baseline.step(
+                m,
+                learningRate,
+                tau
+            );
 
-        chartModelLabel.style.background =
-            "#ece9fb";
 
-        canvasModelName.textContent =
-            "Hybrid model";
+            hybrid.step(
+                m,
+                learningRate,
+                tau
+            );
+        }
 
+
+        render();
     }
 
 
-    drawChart();
-
+    animationFrame =
+        requestAnimationFrame(
+            simulationLoop
+        );
 }
 
 
-/*
-    ============================================================
-    RESEARCH DEFAULT PRESET
-    ============================================================
-*/
+/* ============================================================
+   BUTTONS
+============================================================ */
 
-
-function applyResearchDefaults() {
-
-    stopSimulation();
-
-
-    modelSelect.value =
-        "hybrid";
-
-    populationInput.value =
-        "20";
-
-    assortativityInput.value =
-        "1";
-
-    learningRateInput.value =
-        "0.05";
-
-    discountInput.value =
-        "1";
-
-    temperatureInput.value =
-        "1";
-
-    roundsInput.value =
-        "20";
-
-    speedInput.value =
-        "3";
-
-
-    updateControlDisplays();
-    updateModelDescription();
-    initialiseSimulation();
-
-}
-
-
-/*
-    ============================================================
-    EVENTS
-    ============================================================
-*/
-
-
-runButton.addEventListener(
+startButton.addEventListener(
     "click",
-    startSimulation
+    () => {
+
+        if (running) return;
+
+
+        running = true;
+
+        startButton.disabled = true;
+        pauseButton.disabled = false;
+
+        simulationStatus.textContent =
+            "Running";
+
+
+        animationFrame =
+            requestAnimationFrame(
+                simulationLoop
+            );
+    }
 );
 
 
-stepButton.addEventListener(
+pauseButton.addEventListener(
     "click",
-    function stepSimulation() {
+    () => {
 
-        stopSimulation();
-        runGeneration();
+        running = false;
 
+        startButton.disabled = false;
+        pauseButton.disabled = true;
+
+        simulationStatus.textContent =
+            "Paused";
+
+
+        if (
+            animationFrame !== null
+        ) {
+
+            cancelAnimationFrame(
+                animationFrame
+            );
+
+            animationFrame = null;
+        }
     }
 );
 
 
 resetButton.addEventListener(
     "click",
-    initialiseSimulation
-);
+    () => {
+
+        running = false;
 
 
-defaultPresetButton.addEventListener(
-    "click",
-    applyResearchDefaults
-);
+        if (
+            animationFrame !== null
+        ) {
 
-
-populationInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-populationInput.addEventListener(
-    "change",
-    initialiseSimulation
-);
-
-
-assortativityInput.addEventListener(
-    "input",
-    function assortativityChanged() {
-
-        updateControlDisplays();
-
-    }
-);
-
-
-learningRateInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-discountInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-temperatureInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-roundsInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-speedInput.addEventListener(
-    "input",
-    updateControlDisplays
-);
-
-
-modelSelect.addEventListener(
-    "change",
-    function modelChanged() {
-
-        updateModelDescription();
-        initialiseSimulation();
-
-    }
-);
-
-
-mobileMenuButton.addEventListener(
-    "click",
-    function toggleMobileMenu() {
-
-        const navigationIsOpen =
-            navigation.classList.toggle(
-                "open"
+            cancelAnimationFrame(
+                animationFrame
             );
 
-
-        mobileMenuButton.setAttribute(
-            "aria-expanded",
-            String(
-                navigationIsOpen
-            )
-        );
-
-    }
-);
-
-
-navigation
-    .querySelectorAll("a")
-    .forEach(
-        function addNavigationListener(link) {
-
-            link.addEventListener(
-                "click",
-                function closeNavigation() {
-
-                    navigation.classList.remove(
-                        "open"
-                    );
-
-
-                    mobileMenuButton.setAttribute(
-                        "aria-expanded",
-                        "false"
-                    );
-
-                }
-            );
-
+            animationFrame = null;
         }
-    );
 
+
+        baseline.reset();
+        hybrid.reset();
+
+
+        startButton.disabled = false;
+        pauseButton.disabled = true;
+
+        simulationStatus.textContent =
+            "Ready";
+
+
+        render();
+    }
+);
+
+
+/* ============================================================
+   CONTROL LABELS
+============================================================ */
+
+mSlider.addEventListener(
+    "input",
+    () => {
+
+        mValue.textContent =
+            Number(
+                mSlider.value
+            )
+            .toFixed(2);
+    }
+);
+
+
+lrSlider.addEventListener(
+    "input",
+    () => {
+
+        lrValue.textContent =
+            Number(
+                lrSlider.value
+            )
+            .toFixed(2);
+    }
+);
+
+
+tauSlider.addEventListener(
+    "input",
+    () => {
+
+        tauValue.textContent =
+            Number(
+                tauSlider.value
+            )
+            .toFixed(2);
+    }
+);
+
+
+speedSlider.addEventListener(
+    "input",
+    () => {
+
+        speedValue.textContent =
+            speedSlider.value +
+            "×";
+    }
+);
+
+
+/* ============================================================
+   WINDOW RESIZE
+============================================================ */
 
 window.addEventListener(
     "resize",
-    resizeCanvases
+    () => {
+
+        drawChart(
+            baselineChart,
+            baseline.history,
+            BASELINE_COLOUR
+        );
+
+
+        drawChart(
+            hybridChart,
+            hybrid.history,
+            HYBRID_COLOUR
+        );
+    }
 );
 
 
-/*
-    ============================================================
-    START-UP
-    ============================================================
-*/
+/* ============================================================
+   INITIAL RENDER
+============================================================ */
 
-
-updateControlDisplays();
-updateModelDescription();
-resizeCanvases();
-initialiseSimulation();
+render();

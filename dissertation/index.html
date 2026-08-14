@@ -2,821 +2,292 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <meta
-        name="description"
-        content="Interactive research website for Yiota Papafiggou's MSc dissertation on assortative matching and cooperation in multi-agent reinforcement learning systems."
-    >
-
-    <meta
-        name="author"
-        content="Panayiota Papafiggou"
-    >
-
-    <title>
-        Assortative Matching and Cooperation | Yiota Papafiggou
-    </title>
+    <title>Assortative Matching & Cooperation</title>
 
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<header class="site-header">
+<header class="hero">
+    <div class="hero-inner">
 
-    <a class="logo" href="#home">
-        YIOTA PAPAFIGGOU
-    </a>
+        <div class="eyebrow">
+            MSc Computer Science Dissertation · University of Warwick
+        </div>
 
-    <button
-        class="mobile-menu-button"
-        id="mobileMenuButton"
-        type="button"
-        aria-label="Open navigation"
-        aria-expanded="false"
-        aria-controls="navigation"
-    >
-        <span></span>
-        <span></span>
-        <span></span>
-    </button>
+        <h1>
+            Assortative Matching and the Emergence of Cooperation
+        </h1>
 
-    <nav id="navigation" aria-label="Main navigation">
-        <a href="#background">Background</a>
-        <a href="#simulation">Simulation</a>
-        <a href="#models">Models</a>
-        <a href="#experiments">Experiments</a>
-        <a href="#results">Results</a>
-        <a href="#limitations">Limitations</a>
-    </nav>
+        <p class="subtitle">
+            An interactive demonstration of the
+            <span class="baseline-text">Baseline</span>
+            and
+            <span class="hybrid-text">Hybrid</span>
+            multi-agent reinforcement-learning models.
+        </p>
 
+        <p class="description">
+            Both simulations contain 20 reinforcement-learning agents playing a
+            repeated Prisoner&rsquo;s Dilemma. The Baseline repeatedly reforms
+            partnerships using random or assortative rematching. The Hybrid
+            additionally learns whether existing partnerships should be retained
+            or dissolved.
+        </p>
+
+    </div>
 </header>
 
 
 <main>
 
-    <!-- =====================================================
-         HERO
-    ====================================================== -->
+    <!-- =======================================================
+         GLOBAL CONTROLS
+    ======================================================== -->
 
-    <section class="hero" id="home">
-
-        <div class="hero-content">
-
-            <p class="eyebrow">
-                MSc Computer Science Dissertation
-            </p>
-
-            <h1>
-                Assortative Matching and the Emergence of Cooperation
-            </h1>
-
-            <p class="hero-subtitle">
-                in Multi-Agent Reinforcement Learning Systems
-            </p>
-
-            <p class="hero-description">
-                This research investigates whether assortative rematching and
-                learned partner switching can support the emergence and
-                maintenance of cooperation among autonomous reinforcement-learning
-                agents in a repeated Prisoner's Dilemma.
-            </p>
-
-            <div class="hero-meta">
-
-                <div>
-                    <span>Researcher</span>
-                    <strong>Panayiota “Yiota” Papafiggou</strong>
-                </div>
-
-                <div>
-                    <span>Institution</span>
-                    <strong>University of Warwick</strong>
-                </div>
-
-                <div>
-                    <span>Supervisor</span>
-                    <strong>Dr Paolo Turrini</strong>
-                </div>
-
-            </div>
-
-            <div class="hero-buttons">
-
-                <a class="button primary-button" href="#simulation">
-                    Open interactive demonstration
-                </a>
-
-                <a class="button secondary-button" href="#results">
-                    View research results
-                </a>
-
-            </div>
-
-        </div>
-
-
-        <div class="hero-visual" aria-hidden="true">
-
-            <div class="visual-orbit orbit-one"></div>
-            <div class="visual-orbit orbit-two"></div>
-
-            <div class="visual-agent visual-agent-one cooperate-agent">
-                C
-            </div>
-
-            <div class="visual-agent visual-agent-two cooperate-agent">
-                C
-            </div>
-
-            <div class="visual-agent visual-agent-three defect-agent">
-                D
-            </div>
-
-            <div class="visual-link visual-link-one"></div>
-            <div class="visual-link visual-link-two"></div>
-
-            <div class="visual-centre">
-                <strong>MARL</strong>
-                <span>partner selection</span>
-            </div>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         PROJECT NOTICE
-    ====================================================== -->
-
-    <section class="research-notice">
-
-        <div class="notice-icon">
-            i
-        </div>
-
-        <div>
-            <h2>
-                Research results and browser demonstration
-            </h2>
-
-            <p>
-                The numerical results presented on this website come from the
-                full Python and Numba dissertation experiments. The interactive
-                browser simulation is an educational visualisation of the main
-                mechanisms and is not a replacement for the complete experimental
-                implementation.
-            </p>
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         BACKGROUND
-    ====================================================== -->
-
-    <section class="section" id="background">
+    <section class="controls-section">
 
         <div class="section-heading">
+            <div>
+                <span class="section-number">SIMULATION CONTROLS</span>
+                <h2>Run both models under matched conditions</h2>
+            </div>
 
-            <p class="eyebrow">
-                Research background
-            </p>
+            <div class="status-pill" id="simulationStatus">
+                Ready
+            </div>
+        </div>
 
-            <h2>
-                Why cooperation is difficult for learning agents
-            </h2>
 
-            <p>
-                Individually rational behaviour does not always produce the
-                best outcome for a group. In social dilemmas, agents can receive
-                an immediate advantage by acting selfishly even though sustained
-                cooperation would create a better collective outcome.
-            </p>
+        <div class="controls-grid">
+
+            <div class="control-card">
+
+                <div class="control-header">
+                    <label for="mSlider">
+                        Assortativity
+                        <span class="math">m</span>
+                    </label>
+
+                    <span class="control-value" id="mValue">
+                        0.00
+                    </span>
+                </div>
+
+                <input
+                    id="mSlider"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0"
+                >
+
+                <div class="range-labels">
+                    <span>0 · Random</span>
+                    <span>1 · Fully assortative</span>
+                </div>
+
+            </div>
+
+
+            <div class="control-card">
+
+                <div class="control-header">
+                    <label for="lrSlider">
+                        Learning rate
+                        <span class="math">&alpha;</span>
+                    </label>
+
+                    <span class="control-value" id="lrValue">
+                        0.05
+                    </span>
+                </div>
+
+                <input
+                    id="lrSlider"
+                    type="range"
+                    min="0.01"
+                    max="0.20"
+                    step="0.01"
+                    value="0.05"
+                >
+
+                <div class="range-labels">
+                    <span>0.01</span>
+                    <span>0.20</span>
+                </div>
+
+            </div>
+
+
+            <div class="control-card">
+
+                <div class="control-header">
+                    <label for="tauSlider">
+                        Exploration
+                        <span class="math">&tau;</span>
+                    </label>
+
+                    <span class="control-value" id="tauValue">
+                        1.00
+                    </span>
+                </div>
+
+                <input
+                    id="tauSlider"
+                    type="range"
+                    min="0.10"
+                    max="1.00"
+                    step="0.05"
+                    value="1.00"
+                >
+
+                <div class="range-labels">
+                    <span>0.10</span>
+                    <span>1.00</span>
+                </div>
+
+            </div>
+
+
+            <div class="control-card">
+
+                <div class="control-header">
+                    <label for="speedSlider">
+                        Simulation speed
+                    </label>
+
+                    <span class="control-value" id="speedValue">
+                        1×
+                    </span>
+                </div>
+
+                <input
+                    id="speedSlider"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="1"
+                    value="1"
+                >
+
+                <div class="range-labels">
+                    <span>Slow</span>
+                    <span>Fast</span>
+                </div>
+
+            </div>
 
         </div>
 
 
-        <div class="background-grid">
+        <div class="button-row">
 
-            <article class="background-card featured-background-card">
+            <button id="startButton" class="primary-button">
+                Run simulation
+            </button>
 
-                <p class="card-index">
-                    Research problem
-                </p>
+            <button id="pauseButton" class="secondary-button" disabled>
+                Pause
+            </button>
 
-                <h3>
-                    Can interaction structure help cooperation emerge?
-                </h3>
+            <button id="resetButton" class="secondary-button">
+                Reset
+            </button>
 
-                <p>
-                    Standard reinforcement-learning agents optimise behaviour
-                    using experienced rewards. In a Prisoner's Dilemma,
-                    defection provides a strong short-term incentive, making
-                    persistent cooperation difficult to learn.
-                </p>
-
-                <p>
-                    This dissertation studies whether agents can overcome this
-                    difficulty when they can change interaction partners and
-                    when rematching favours agents with similar recent behaviour.
-                </p>
-
-            </article>
+        </div>
 
 
-            <article class="background-card">
-
-                <span class="topic-symbol">
-                    C
-                </span>
-
-                <h3>
-                    Cooperation
-                </h3>
-
-                <p>
-                    A cooperative action can produce a strong mutual benefit,
-                    but it also exposes an agent to exploitation by a defector.
-                </p>
-
-            </article>
-
-
-            <article class="background-card">
-
-                <span class="topic-symbol pink-symbol">
-                    D
-                </span>
-
-                <h3>
-                    Defection
-                </h3>
-
-                <p>
-                    Defection can maximise an immediate individual payoff,
-                    particularly when the interaction partner cooperates.
-                </p>
-
-            </article>
-
-
-            <article class="background-card">
-
-                <span class="topic-symbol">
-                    m
-                </span>
-
-                <h3>
-                    Assortative rematching
-                </h3>
-
-                <p>
-                    Assortativity changes who interacts with whom by increasing
-                    the probability that agents with similar previous actions
-                    are paired.
-                </p>
-
-            </article>
-
-
-            <article class="background-card">
-
-                <span class="topic-symbol pink-symbol">
-                    S
-                </span>
-
-                <h3>
-                    Partner switching
-                </h3>
-
-                <p>
-                    In the hybrid model, agents learn whether to retain their
-                    current partner or enter the rematching pool.
-                </p>
-
-            </article>
-
+        <div class="fixed-settings">
+            <span><strong>N</strong> = 20 agents</span>
+            <span><strong>Rounds</strong> = 20</span>
+            <span><strong>&gamma;</strong> = 1.0</span>
+            <span><strong>Q<sub>0</sub></strong> = 0</span>
+            <span><strong>PD</strong> = (R,T,P,S) = (3,5,1,0)</span>
         </div>
 
     </section>
 
 
 
-    <!-- =====================================================
-         RESEARCH QUESTIONS
-    ====================================================== -->
+    <!-- =======================================================
+         MODEL SIMULATIONS
+    ======================================================== -->
 
-    <section class="section question-section">
+    <section class="simulation-section">
 
-        <div class="question-introduction">
+        <div class="models-grid">
 
-            <p class="eyebrow">
-                Research objective
-            </p>
+            <!-- BASELINE -->
 
-            <h2>
-                Understanding when and why cooperation becomes stable
-            </h2>
+            <article class="model-card baseline-card">
 
-        </div>
-
-
-        <div class="question-list">
-
-            <article>
-                <span>01</span>
-
-                <div>
-                    <h3>
-                        Effect of assortativity
-                    </h3>
-
-                    <p>
-                        How does increasing the assortativity parameter
-                        \(m\) affect final cooperation?
-                    </p>
-                </div>
-            </article>
-
-
-            <article>
-                <span>02</span>
-
-                <div>
-                    <h3>
-                        Value of adaptive partner choice
-                    </h3>
-
-                    <p>
-                        Does learned stay-or-switch behaviour improve cooperation
-                        beyond assortative rematching alone?
-                    </p>
-                </div>
-            </article>
-
-
-            <article>
-                <span>03</span>
-
-                <div>
-                    <h3>
-                        Robustness
-                    </h3>
-
-                    <p>
-                        Do the principal findings persist across changes in
-                        learning, exploration, population size and training time?
-                    </p>
-                </div>
-            </article>
-
-
-            <article>
-                <span>04</span>
-
-                <div>
-                    <h3>
-                        Learning dynamics
-                    </h3>
-
-                    <p>
-                        How quickly does cooperation stabilise, and which learned
-                        behaviours support the final outcome?
-                    </p>
-                </div>
-            </article>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         SIMULATION
-    ====================================================== -->
-
-    <section class="section simulation-section" id="simulation">
-
-        <div class="section-heading">
-
-            <p class="eyebrow">
-                Interactive educational demonstration
-            </p>
-
-            <h2>
-                Explore interaction and partner-selection mechanisms
-            </h2>
-
-            <p>
-                Select a model and adjust the demonstration parameters. The
-                visualisation illustrates action learning, repeated interaction,
-                assortative rematching and, in the hybrid model, learned
-                stay-or-switch decisions.
-            </p>
-
-        </div>
-
-
-        <div class="simulation-disclaimer">
-
-            <strong>
-                Important:
-            </strong>
-
-            <span>
-                Values generated below are illustrative browser outcomes.
-                They must not be interpreted as dissertation experiment results.
-            </span>
-
-        </div>
-
-
-        <div class="simulation-layout">
-
-            <!-- CONTROLS -->
-
-            <aside class="control-panel">
-
-                <div class="control-panel-heading">
+                <div class="model-header">
 
                     <div>
-                        <p class="small-label">
-                            Configuration
-                        </p>
-
-                        <h3>
-                            Simulation controls
-                        </h3>
-                    </div>
-
-                    <button
-                        class="preset-button"
-                        id="defaultPresetButton"
-                        type="button"
-                    >
-                        Research defaults
-                    </button>
-
-                </div>
-
-
-                <div class="control-grid">
-
-                    <div class="control-group full-width-control">
-
-                        <label for="modelSelect">
-                            Interaction model
-                        </label>
-
-                        <select id="modelSelect">
-
-                            <option value="hybrid">
-                                Hybrid model
-                            </option>
-
-                            <option value="baseline">
-                                Baseline model
-                            </option>
-
-                        </select>
-
-                        <p
-                            class="control-explanation"
-                            id="modelExplanation"
-                        >
-                            Agents learn both their Prisoner's Dilemma actions
-                            and whether to remain with or leave their current
-                            partner.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="populationInput">
-                                Population size, N
-                            </label>
-
-                            <output id="populationOutput">
-                                20
-                            </output>
-
+                        <div class="model-label baseline-label">
+                            EXPERIMENT 1
                         </div>
 
-                        <input
-                            id="populationInput"
-                            type="range"
-                            min="10"
-                            max="100"
-                            step="2"
-                            value="20"
-                        >
+                        <h2>Baseline Model</h2>
 
-                        <p class="control-explanation">
-                            Number of agents in the population.
+                        <p>
+                            Agents learn whether to cooperate or defect.
+                            Partnerships are reconstructed every round using
+                            random or assortative rematching according to
+                            <span class="math">m</span>.
                         </p>
-
                     </div>
 
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="assortativityInput">
-                                Assortativity, m
-                            </label>
-
-                            <output id="assortativityOutput">
-                                1.00
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="assortativityInput"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value="1"
-                        >
-
-                        <p class="control-explanation">
-                            \(m=0\) gives random rematching and \(m=1\)
-                            gives fully assortative rematching by previous action.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="learningRateInput">
-                                Learning rate, α
-                            </label>
-
-                            <output id="learningRateOutput">
-                                0.05
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="learningRateInput"
-                            type="range"
-                            min="0.01"
-                            max="0.20"
-                            step="0.01"
-                            value="0.05"
-                        >
-
-                        <p class="control-explanation">
-                            Controls the size of each Q-value update.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="discountInput">
-                                Discount factor, γ
-                            </label>
-
-                            <output id="discountOutput">
-                                1.00
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="discountInput"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value="1"
-                        >
-
-                        <p class="control-explanation">
-                            Controls the contribution of expected future returns.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="temperatureInput">
-                                Exploration temperature, τ
-                            </label>
-
-                            <output id="temperatureOutput">
-                                1.00
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="temperatureInput"
-                            type="range"
-                            min="0.10"
-                            max="2"
-                            step="0.10"
-                            value="1"
-                        >
-
-                        <p class="control-explanation">
-                            Controls Boltzmann exploration during action selection.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group">
-
-                        <div class="control-label-row">
-
-                            <label for="roundsInput">
-                                Rounds per interaction
-                            </label>
-
-                            <output id="roundsOutput">
-                                20
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="roundsInput"
-                            type="range"
-                            min="2"
-                            max="30"
-                            step="1"
-                            value="20"
-                        >
-
-                        <p class="control-explanation">
-                            Number of repeated rounds before rematching is considered.
-                        </p>
-
-                    </div>
-
-
-                    <div class="control-group full-width-control">
-
-                        <div class="control-label-row">
-
-                            <label for="speedInput">
-                                Display speed
-                            </label>
-
-                            <output id="speedOutput">
-                                3×
-                            </output>
-
-                        </div>
-
-                        <input
-                            id="speedInput"
-                            type="range"
-                            min="1"
-                            max="5"
-                            step="1"
-                            value="3"
-                        >
-
-                        <p class="control-explanation">
-                            Changes only the animation speed, not agent learning.
-                        </p>
-
+                    <div class="model-badge baseline-badge">
+                        No learned<br>partner retention
                     </div>
 
                 </div>
 
 
-                <div class="simulation-buttons">
+                <div class="mechanism baseline-mechanism">
 
-                    <button
-                        class="button primary-button"
-                        id="runButton"
-                        type="button"
-                    >
-                        Run
-                    </button>
+                    <span>PD interaction</span>
+                    <span class="arrow">→</span>
 
-                    <button
-                        class="button secondary-button"
-                        id="stepButton"
-                        type="button"
-                    >
-                        Single step
-                    </button>
+                    <span>Q-value learning</span>
+                    <span class="arrow">→</span>
 
-                    <button
-                        class="button reset-button"
-                        id="resetButton"
-                        type="button"
-                    >
-                        Reset
-                    </button>
-
-                </div>
-
-            </aside>
-
-
-
-            <!-- DISPLAY -->
-
-            <div class="simulation-content">
-
-                <div class="simulation-status">
-
-                    <div class="status-left">
-
-                        <span
-                            class="status-dot"
-                            id="statusDot"
-                        ></span>
-
-                        <span id="statusText">
-                            Ready
-                        </span>
-
-                    </div>
-
-                    <div class="status-information">
-
-                        <span>
-                            Demonstration step
-                        </span>
-
-                        <strong id="generationValue">
-                            0
-                        </strong>
-
-                    </div>
+                    <span>Rematching</span>
 
                 </div>
 
 
-                <div class="canvas-container">
+                <div class="network-container">
 
-                    <canvas
-                        id="agentCanvas"
-                        aria-label="Visualisation of paired cooperative and defective agents"
-                    ></canvas>
+                    <svg
+                        id="baselineNetwork"
+                        class="network"
+                        viewBox="0 0 600 420"
+                        aria-label="Baseline agent network"
+                    ></svg>
 
-                    <div class="canvas-centre-label">
+                    <div class="network-legend">
 
-                        <span id="canvasModelName">
-                            Hybrid model
-                        </span>
+                        <div>
+                            <span class="legend-node baseline-cooperate-node">C</span>
+                            Cooperating
+                        </div>
 
-                        <strong id="canvasAssortativity">
-                            m = 1.00
-                        </strong>
+                        <div>
+                            <span class="legend-node baseline-defect-node">D</span>
+                            Defecting
+                        </div>
 
-                    </div>
-
-                    <div class="canvas-legend">
-
-                        <span>
-                            <i class="legend-circle cooperate-colour"></i>
-                            Cooperative action
-                        </span>
-
-                        <span>
-                            <i class="legend-circle defect-colour"></i>
-                            Defective action
-                        </span>
-
-                        <span>
-                            <i class="legend-connection"></i>
-                            Current interaction pair
-                        </span>
+                        <div>
+                            <span class="legend-line baseline-line"></span>
+                            Current partnership
+                        </div>
 
                     </div>
 
@@ -825,1464 +296,203 @@
 
                 <div class="metrics-grid">
 
-                    <article class="metric-card">
+                    <div class="metric">
+                        <span class="metric-title">Iteration</span>
+                        <strong id="baselineIteration">0</strong>
+                    </div>
 
-                        <span>
-                            Current cooperation rate
-                        </span>
+                    <div class="metric">
+                        <span class="metric-title">Cooperation</span>
+                        <strong id="baselineCooperation">—</strong>
+                    </div>
 
-                        <strong id="cooperationMetric">
-                            50%
-                        </strong>
+                    <div class="metric">
+                        <span class="metric-title">Cooperators</span>
+                        <strong id="baselineCooperators">—</strong>
+                    </div>
 
-                        <small>
-                            Cooperative actions ÷ agents
-                        </small>
-
-                    </article>
-
-
-                    <article class="metric-card">
-
-                        <span>
-                            Mean stage-game reward
-                        </span>
-
-                        <strong id="rewardMetric">
-                            0.00
-                        </strong>
-
-                        <small>
-                            Current round only
-                        </small>
-
-                    </article>
-
-
-                    <article class="metric-card">
-
-                        <span>
-                            Partner-change rate
-                        </span>
-
-                        <strong id="switchingMetric">
-                            0%
-                        </strong>
-
-                        <small>
-                            Agents assigned a different partner
-                        </small>
-
-                    </article>
-
-
-                    <article class="metric-card">
-
-                        <span>
-                            Retained pairs
-                        </span>
-
-                        <strong id="stablePairsMetric">
-                            0
-                        </strong>
-
-                        <small>
-                            Pairs unchanged after rematching
-                        </small>
-
-                    </article>
+                    <div class="metric">
+                        <span class="metric-title">Rematching</span>
+                        <strong id="baselineSwitching">100%</strong>
+                    </div>
 
                 </div>
 
 
-                <div class="results-grid">
+                <div class="chart-box">
 
-                    <article class="chart-card">
+                    <div class="chart-heading">
+                        <span>Cooperation during training</span>
+                        <span class="baseline-text">Baseline</span>
+                    </div>
 
-                        <div class="card-heading">
-
-                            <div>
-
-                                <p class="small-label">
-                                    Browser demonstration
-                                </p>
-
-                                <h3>
-                                    Cooperation over recent steps
-                                </h3>
-
-                            </div>
-
-                            <span id="chartModelLabel">
-                                Hybrid
-                            </span>
-
-                        </div>
-
-                        <canvas
-                            id="cooperationChart"
-                            aria-label="Line chart showing cooperation during the browser demonstration"
-                        ></canvas>
-
-                    </article>
-
-
-                    <article class="outcomes-card">
-
-                        <div class="card-heading">
-
-                            <div>
-
-                                <p class="small-label">
-                                    Current interaction round
-                                </p>
-
-                                <h3>
-                                    Pair outcomes
-                                </h3>
-
-                            </div>
-
-                        </div>
-
-
-                        <div class="outcome-key">
-                            <span>C = cooperate</span>
-                            <span>D = defect</span>
-                        </div>
-
-
-                        <div class="outcome-row">
-
-                            <span>CC</span>
-
-                            <div class="outcome-bar">
-                                <i id="ccBar"></i>
-                            </div>
-
-                            <strong id="ccValue">
-                                0
-                            </strong>
-
-                        </div>
-
-
-                        <div class="outcome-row">
-
-                            <span>CD</span>
-
-                            <div class="outcome-bar">
-                                <i id="cdBar"></i>
-                            </div>
-
-                            <strong id="cdValue">
-                                0
-                            </strong>
-
-                        </div>
-
-
-                        <div class="outcome-row">
-
-                            <span>DC</span>
-
-                            <div class="outcome-bar">
-                                <i id="dcBar"></i>
-                            </div>
-
-                            <strong id="dcValue">
-                                0
-                            </strong>
-
-                        </div>
-
-
-                        <div class="outcome-row">
-
-                            <span>DD</span>
-
-                            <div class="outcome-bar">
-                                <i id="ddBar"></i>
-                            </div>
-
-                            <strong id="ddValue">
-                                0
-                            </strong>
-
-                        </div>
-
-                    </article>
+                    <canvas id="baselineChart"></canvas>
 
                 </div>
 
-            </div>
-
-        </div>
-
-    </section>
+            </article>
 
 
 
-    <!-- =====================================================
-         MODELS
-    ====================================================== -->
+            <!-- HYBRID -->
 
-    <section class="section" id="models">
+            <article class="model-card hybrid-card">
 
-        <div class="section-heading">
-
-            <p class="eyebrow">
-                Model architecture
-            </p>
-
-            <h2>
-                A controlled baseline and an adaptive hybrid model
-            </h2>
-
-            <p>
-                Both models use the same repeated Prisoner's Dilemma learning
-                environment. Their central difference is whether agents learn
-                a partner-retention and switching policy.
-            </p>
-
-        </div>
-
-
-        <div class="model-comparison">
-
-            <article class="model-card baseline-model-card">
-
-                <div class="model-card-header">
+                <div class="model-header">
 
                     <div>
-                        <p class="small-label">
-                            Controlled comparison
+                        <div class="model-label hybrid-label">
+                            EXPERIMENT 2
+                        </div>
+
+                        <h2>Hybrid Model</h2>
+
+                        <p>
+                            Agents learn both Prisoner&rsquo;s Dilemma behaviour
+                            and whether to stay with or switch from their current
+                            partner. Only dissolved partnerships enter rematching.
                         </p>
-
-                        <h3>
-                            Baseline model
-                        </h3>
                     </div>
 
-                    <span class="model-badge baseline-badge">
-                        Baseline
-                    </span>
+                    <div class="model-badge hybrid-badge">
+                        Learned<br>stay / switch
+                    </div>
 
                 </div>
 
-                <p class="model-summary">
-                    The baseline isolates the effect of assortative rematching.
-                    Agents learn their Prisoner's Dilemma actions but do not
-                    learn a separate stay-or-switch policy.
-                </p>
 
-                <ol class="mechanism-list">
+                <div class="mechanism hybrid-mechanism">
 
-                    <li>
-                        Agents repeatedly interact with a current partner.
-                    </li>
+                    <span>Stay / switch</span>
+                    <span class="arrow">→</span>
 
-                    <li>
-                        Prisoner's Dilemma actions are selected using learned
-                        action values.
-                    </li>
+                    <span>Selective retention</span>
+                    <span class="arrow">→</span>
 
-                    <li>
-                        After an interaction block, agents enter the rematching
-                        process.
-                    </li>
+                    <span>Rematching</span>
+                    <span class="arrow">→</span>
 
-                    <li>
-                        Rematching is random with probability \(1-m\) and
-                        assortative with probability \(m\).
-                    </li>
+                    <span>PD interaction</span>
 
-                </ol>
+                </div>
 
-                <div class="model-purpose">
 
-                    <strong>
-                        Experimental purpose
-                    </strong>
+                <div class="network-container">
 
-                    <p>
-                        Tests whether assortative rematching alone is sufficient
-                        to sustain cooperation.
-                    </p>
+                    <svg
+                        id="hybridNetwork"
+                        class="network"
+                        viewBox="0 0 600 420"
+                        aria-label="Hybrid agent network"
+                    ></svg>
+
+                    <div class="network-legend">
+
+                        <div>
+                            <span class="legend-node hybrid-cooperate-node">C</span>
+                            Cooperating
+                        </div>
+
+                        <div>
+                            <span class="legend-node hybrid-defect-node">D</span>
+                            Defecting
+                        </div>
+
+                        <div>
+                            <span class="legend-line hybrid-line"></span>
+                            Current partnership
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="metrics-grid">
+
+                    <div class="metric">
+                        <span class="metric-title">Iteration</span>
+                        <strong id="hybridIteration">0</strong>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-title">Cooperation</span>
+                        <strong id="hybridCooperation">—</strong>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-title">Cooperators</span>
+                        <strong id="hybridCooperators">—</strong>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-title">Switch rate</span>
+                        <strong id="hybridSwitching">—</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="chart-box">
+
+                    <div class="chart-heading">
+                        <span>Cooperation during training</span>
+                        <span class="hybrid-text">Hybrid</span>
+                    </div>
+
+                    <canvas id="hybridChart"></canvas>
 
                 </div>
 
             </article>
 
+        </div>
 
-            <article class="model-card hybrid-model-card">
+    </section>
 
-                <div class="model-card-header">
+
+
+    <!-- =======================================================
+         SHORT MODEL EXPLANATION
+    ======================================================== -->
+
+    <section class="difference-section">
+
+        <div class="difference-content">
+
+            <div class="difference-title">
+                <span class="section-number">THE CONTROLLED DIFFERENCE</span>
+                <h2>Partner formation versus partner retention</h2>
+            </div>
+
+
+            <div class="difference-grid">
+
+                <div class="difference-item baseline-difference">
+                    <span class="difference-dot"></span>
 
                     <div>
-                        <p class="small-label">
-                            Proposed combined mechanism
+                        <strong>Baseline</strong>
+                        <p>
+                            The value of <span class="math">m</span> determines
+                            whether the whole population is randomly or
+                            assortatively paired each round.
                         </p>
-
-                        <h3>
-                            Hybrid model
-                        </h3>
                     </div>
-
-                    <span class="model-badge hybrid-badge">
-                        Hybrid
-                    </span>
-
                 </div>
 
-                <p class="model-summary">
-                    The hybrid combines learned partner retention and switching
-                    with random or assortative rematching.
-                </p>
 
-                <ol class="mechanism-list">
-
-                    <li>
-                        Agents repeatedly interact with their current partner.
-                    </li>
-
-                    <li>
-                        Agents learn Prisoner's Dilemma action values.
-                    </li>
-
-                    <li>
-                        Agents also learn whether to stay with or switch away
-                        from their current partner.
-                    </li>
-
-                    <li>
-                        Agents entering the rematching pool are paired randomly
-                        with probability \(1-m\) or assortatively with
-                        probability \(m\).
-                    </li>
-
-                </ol>
-
-                <div class="model-purpose">
-
-                    <strong>
-                        Experimental purpose
-                    </strong>
-
-                    <p>
-                        Tests whether adaptive partner mobility and behavioural
-                        similarity reinforce one another.
-                    </p>
-
-                </div>
-
-            </article>
-
-        </div>
-
-
-        <div class="model-flow">
-
-            <article>
-                <span>01</span>
-                <h3>State observation</h3>
-                <p>
-                    Agent decisions depend on information from previous
-                    interactions.
-                </p>
-            </article>
-
-            <div class="flow-arrow">→</div>
-
-            <article>
-                <span>02</span>
-                <h3>Action selection</h3>
-                <p>
-                    Agents choose cooperation or defection using learned values
-                    and Boltzmann exploration.
-                </p>
-            </article>
-
-            <div class="flow-arrow">→</div>
-
-            <article>
-                <span>03</span>
-                <h3>Reward and learning</h3>
-                <p>
-                    Stage-game rewards update the agents' learned action values.
-                </p>
-            </article>
-
-            <div class="flow-arrow">→</div>
-
-            <article>
-                <span>04</span>
-                <h3>Partner process</h3>
-                <p>
-                    Depending on the model, agents are rematched directly or
-                    first make learned stay-or-switch decisions.
-                </p>
-            </article>
-
-        </div>
-
-
-
-        <div class="payoff-section">
-
-            <div class="payoff-text">
-
-                <p class="eyebrow">
-                    Stage game
-                </p>
-
-                <h3>
-                    Prisoner's Dilemma payoff structure
-                </h3>
-
-                <p>
-                    Mutual cooperation produces a reward of 3 for each agent.
-                    A defector receives 5 against a cooperator, while the
-                    exploited cooperator receives 0. Mutual defection produces
-                    a reward of 1 for each agent.
-                </p>
-
-            </div>
-
-
-            <div class="payoff-table-wrapper">
-
-                <table class="payoff-table">
-
-                    <caption>
-                        Ordered payoffs are shown as
-                        (row agent, column agent).
-                    </caption>
-
-                    <thead>
-
-                        <tr>
-                            <th scope="col"></th>
-                            <th scope="col">Partner cooperates</th>
-                            <th scope="col">Partner defects</th>
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        <tr>
-                            <th scope="row">Agent cooperates</th>
-                            <td>
-                                <strong>3, 3</strong>
-                                <span>Mutual cooperation</span>
-                            </td>
-
-                            <td>
-                                <strong>0, 5</strong>
-                                <span>Cooperator exploited</span>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <th scope="row">Agent defects</th>
-                            <td>
-                                <strong>5, 0</strong>
-                                <span>Temptation payoff</span>
-                            </td>
-
-                            <td>
-                                <strong>1, 1</strong>
-                                <span>Mutual defection</span>
-                            </td>
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         EXPERIMENTS
-    ====================================================== -->
-
-    <section class="section experiments-section" id="experiments">
-
-        <div class="section-heading">
-
-            <p class="eyebrow">
-                Experimental programme
-            </p>
-
-            <h2>
-                Main comparison, sensitivity analyses and component ablations
-            </h2>
-
-            <p>
-                Conditions were evaluated using repeated independent simulations.
-                Sensitivity analyses varied one parameter at a time to test
-                robustness rather than to claim a globally optimal configuration.
-            </p>
-
-        </div>
-
-
-        <div class="default-configuration">
-
-            <div class="configuration-heading">
-
-                <p class="small-label">
-                    Main experimental configuration
-                </p>
-
-                <h3>
-                    Default settings
-                </h3>
-
-            </div>
-
-
-            <div class="configuration-values">
-
-                <div>
-                    <span>Population</span>
-                    <strong>N = 20</strong>
-                </div>
-
-                <div>
-                    <span>Learning rate</span>
-                    <strong>α = 0.05</strong>
-                </div>
-
-                <div>
-                    <span>Temperature</span>
-                    <strong>τ = 1.0</strong>
-                </div>
-
-                <div>
-                    <span>Rounds</span>
-                    <strong>20</strong>
-                </div>
-
-                <div>
-                    <span>Training horizon</span>
-                    <strong>T = 100,000</strong>
-                </div>
-
-                <div>
-                    <span>Independent runs</span>
-                    <strong>10</strong>
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="experiment-grid">
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol">
-                    m
-                </div>
-
-                <p class="small-label">
-                    Main experiment
-                </p>
-
-                <h3>
-                    Assortativity analysis
-                </h3>
-
-                <p>
-                    Compared baseline and hybrid cooperation across:
-                </p>
-
-                <strong class="parameter-values">
-                    0.00, 0.30, 0.50, 0.70, 1.00
-                </strong>
-
-                <p class="experiment-purpose">
-                    Examines how the probability of behaviourally similar
-                    rematching affects cooperation.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol pink-symbol">
-                    α
-                </div>
-
-                <p class="small-label">
-                    Sensitivity analysis
-                </p>
-
-                <h3>
-                    Learning rate
-                </h3>
-
-                <p>
-                    Tested:
-                </p>
-
-                <strong class="parameter-values">
-                    0.01, 0.05, 0.10, 0.20
-                </strong>
-
-                <p class="experiment-purpose">
-                    Evaluates sensitivity to the rate at which new experience
-                    changes learned values.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol">
-                    N
-                </div>
-
-                <p class="small-label">
-                    Sensitivity analysis
-                </p>
-
-                <h3>
-                    Population size
-                </h3>
-
-                <p>
-                    Tested:
-                </p>
-
-                <strong class="parameter-values">
-                    10, 20, 50, 100 agents
-                </strong>
-
-                <p class="experiment-purpose">
-                    Investigates whether cooperative and defective subgroups
-                    behave differently as the population grows.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol pink-symbol">
-                    τ
-                </div>
-
-                <p class="small-label">
-                    Sensitivity analysis
-                </p>
-
-                <h3>
-                    Exploration temperature
-                </h3>
-
-                <p>
-                    Tested:
-                </p>
-
-                <strong class="parameter-values">
-                    0.10, 0.50, 1.00
-                </strong>
-
-                <p class="experiment-purpose">
-                    Examines sensitivity to the balance between exploration and
-                    exploitation.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol">
-                    T
-                </div>
-
-                <p class="small-label">
-                    Sensitivity analysis
-                </p>
-
-                <h3>
-                    Training horizon
-                </h3>
-
-                <p>
-                    Tested:
-                </p>
-
-                <strong class="parameter-values">
-                    50,000, 100,000, 200,000
-                </strong>
-
-                <p class="experiment-purpose">
-                    Tests whether model differences persist under shorter and
-                    longer training periods.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol pink-symbol">
-                    γ
-                </div>
-
-                <p class="small-label">
-                    Component ablation
-                </p>
-
-                <h3>
-                    Future-return learning
-                </h3>
-
-                <p>
-                    Compared the full configuration with:
-                </p>
-
-                <strong class="parameter-values">
-                    γ = 0
-                </strong>
-
-                <p class="experiment-purpose">
-                    Removes future-return learning so that updates depend only
-                    on immediate rewards.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol">
-                    S
-                </div>
-
-                <p class="small-label">
-                    Component ablation
-                </p>
-
-                <h3>
-                    Partner-switch learning
-                </h3>
-
-                <p>
-                    Compared:
-                </p>
-
-                <strong class="parameter-values">
-                    learned versus disabled
-                </strong>
-
-                <p class="experiment-purpose">
-                    Tests whether agents must learn selective partner retention
-                    and switching.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol pink-symbol">
-                    t
-                </div>
-
-                <p class="small-label">
-                    Dynamic analysis
-                </p>
-
-                <h3>
-                    Learning speed
-                </h3>
-
-                <p>
-                    Recorded convergence behaviour across training.
-                </p>
-
-                <strong class="parameter-values">
-                    baseline versus hybrid
-                </strong>
-
-                <p class="experiment-purpose">
-                    Distinguishes fast convergence from high final cooperation.
-                </p>
-
-            </article>
-
-
-            <article class="experiment-card">
-
-                <div class="experiment-symbol">
-                    π
-                </div>
-
-                <p class="small-label">
-                    Behavioural analysis
-                </p>
-
-                <h3>
-                    Learned strategies
-                </h3>
-
-                <p>
-                    Examined final policy composition and switching behaviour.
-                </p>
-
-                <strong class="parameter-values">
-                    cooperative, reciprocal and defective policies
-                </strong>
-
-                <p class="experiment-purpose">
-                    Provides behavioural explanations for differences in final
-                    cooperation.
-                </p>
-
-            </article>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         RESULTS
-    ====================================================== -->
-
-    <section class="section results-section" id="results">
-
-        <div class="section-heading">
-
-            <p class="eyebrow">
-                Completed experimental findings
-            </p>
-
-            <h2>
-                The hybrid advantage depends on adaptive learning mechanisms
-            </h2>
-
-            <p>
-                The strongest mechanistic evidence comes from the component
-                ablations. These experiments test whether the hybrid result
-                survives when future-return learning or partner-switch-policy
-                learning is removed.
-            </p>
-
-        </div>
-
-
-        <div class="result-highlight-grid">
-
-            <article class="result-highlight hybrid-result">
-
-                <p class="small-label">
-                    Full hybrid model
-                </p>
-
-                <strong>
-                    70.4%
-                </strong>
-
-                <h3>
-                    Mean final cooperation
-                </h3>
-
-                <p>
-                    Observed in the completed component-ablation comparison
-                    under the full hybrid configuration.
-                </p>
-
-            </article>
-
-
-            <article class="result-highlight baseline-result">
-
-                <p class="small-label">
-                    Full baseline model
-                </p>
-
-                <strong>
-                    5.2%
-                </strong>
-
-                <h3>
-                    Mean final cooperation
-                </h3>
-
-                <p>
-                    The baseline produced substantially lower cooperation under
-                    the matched full configuration.
-                </p>
-
-            </article>
-
-
-            <article class="result-highlight neutral-result">
-
-                <p class="small-label">
-                    Immediate-reward variants
-                </p>
-
-                <strong>
-                    ≈22.9%
-                </strong>
-
-                <h3>
-                    Cooperation with γ = 0
-                </h3>
-
-                <p>
-                    Baseline and hybrid outcomes became almost identical when
-                    future-return learning was removed.
-                </p>
-
-            </article>
-
-
-            <article class="result-highlight baseline-result">
-
-                <p class="small-label">
-                    Hybrid without switch learning
-                </p>
-
-                <strong>
-                    6.0%
-                </strong>
-
-                <h3>
-                    Mean final cooperation
-                </h3>
-
-                <p>
-                    Disabling learning of the stay-or-switch policy largely
-                    removed the hybrid model's cooperation advantage.
-                </p>
-
-            </article>
-
-        </div>
-
-
-
-        <div class="result-detail-grid">
-
-            <article class="result-detail-card">
-
-                <div class="result-detail-heading">
-
-                    <span class="result-number">
-                        01
-                    </span>
+                <div class="difference-item hybrid-difference">
+                    <span class="difference-dot"></span>
 
                     <div>
-                        <p class="small-label">
-                            Future-return learning ablation
+                        <strong>Hybrid</strong>
+                        <p>
+                            Agents first learn whether their existing relationship
+                            should remain. Assortative rematching is applied only
+                            to agents whose partnership has been dissolved.
                         </p>
-
-                        <h3>
-                            Removing discounting eliminated the model difference
-                        </h3>
                     </div>
-
-                </div>
-
-                <div class="comparison-bars">
-
-                    <div class="comparison-row">
-
-                        <div class="comparison-label">
-                            <span>Full hybrid</span>
-                            <strong>70.4%</strong>
-                        </div>
-
-                        <div class="comparison-track">
-                            <i
-                                class="hybrid-bar"
-                                style="width: 70.4%;"
-                            ></i>
-                        </div>
-
-                    </div>
-
-
-                    <div class="comparison-row">
-
-                        <div class="comparison-label">
-                            <span>Hybrid, γ = 0</span>
-                            <strong>22.9%</strong>
-                        </div>
-
-                        <div class="comparison-track">
-                            <i
-                                class="neutral-bar"
-                                style="width: 22.9%;"
-                            ></i>
-                        </div>
-
-                    </div>
-
-
-                    <div class="comparison-row">
-
-                        <div class="comparison-label">
-                            <span>Full baseline</span>
-                            <strong>5.2%</strong>
-                        </div>
-
-                        <div class="comparison-track">
-                            <i
-                                class="baseline-bar"
-                                style="width: 5.2%;"
-                            ></i>
-                        </div>
-
-                    </div>
-
-
-                    <div class="comparison-row">
-
-                        <div class="comparison-label">
-                            <span>Baseline, γ = 0</span>
-                            <strong>22.9%</strong>
-                        </div>
-
-                        <div class="comparison-track">
-                            <i
-                                class="neutral-bar"
-                                style="width: 22.9%;"
-                            ></i>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <p class="result-interpretation">
-                    This does not mean that setting \(\gamma=0\) always reduces
-                    cooperation. Instead, it changes the learning process and
-                    removes the distinctive advantage of the full hybrid model.
-                </p>
-
-            </article>
-
-
-            <article class="result-detail-card">
-
-                <div class="result-detail-heading">
-
-                    <span class="result-number pink-result-number">
-                        02
-                    </span>
-
-                    <div>
-                        <p class="small-label">
-                            Partner-switch learning ablation
-                        </p>
-
-                        <h3>
-                            Selective partner retention was essential
-                        </h3>
-                    </div>
-
-                </div>
-
-                <div class="large-comparison">
-
-                    <div>
-
-                        <span>
-                            Learned switching
-                        </span>
-
-                        <strong class="purple-value">
-                            70.4%
-                        </strong>
-
-                    </div>
-
-                    <div class="comparison-arrow">
-                        →
-                    </div>
-
-                    <div>
-
-                        <span>
-                            Switching learning disabled
-                        </span>
-
-                        <strong class="pink-value">
-                            6.0%
-                        </strong>
-
-                    </div>
-
-                </div>
-
-                <div class="reduction-callout">
-
-                    <strong>
-                        91.5% reduction
-                    </strong>
-
-                    <span>
-                        in mean final cooperation
-                    </span>
-
-                </div>
-
-                <p class="result-interpretation">
-                    When switch-policy learning was disabled, stay and switch
-                    values remained tied and agents switched approximately half
-                    of the time. The result indicates that frequent movement is
-                    not enough: agents must learn when to retain a productive
-                    partner and when to leave an unproductive one.
-                </p>
-
-            </article>
-
-        </div>
-
-
-
-        <div class="learning-speed-section">
-
-            <div class="learning-speed-copy">
-
-                <p class="eyebrow">
-                    Learning-speed analysis
-                </p>
-
-                <h3>
-                    Faster convergence did not mean better cooperation
-                </h3>
-
-                <p>
-                    At \(m=1\), the baseline stabilised much earlier than the
-                    hybrid, but it stabilised at a substantially lower level of
-                    cooperation.
-                </p>
-
-                <p>
-                    The hybrid required more training to develop its adaptive
-                    interaction structure. Its slower convergence was associated
-                    with a much stronger long-term cooperative outcome.
-                </p>
-
-            </div>
-
-
-            <div class="convergence-comparison">
-
-                <article class="convergence-card baseline-convergence">
-
-                    <p class="small-label">
-                        Baseline at m = 1
-                    </p>
-
-                    <strong>
-                        ≈10,000
-                    </strong>
-
-                    <span>
-                        mean convergence iteration
-                    </span>
-
-                    <div class="convergence-line">
-                        <i style="width: 14.3%;"></i>
-                    </div>
-
-                </article>
-
-
-                <article class="convergence-card hybrid-convergence">
-
-                    <p class="small-label">
-                        Hybrid at m = 1
-                    </p>
-
-                    <strong>
-                        ≈70,000
-                    </strong>
-
-                    <span>
-                        mean convergence iteration
-                    </span>
-
-                    <div class="convergence-line">
-                        <i style="width: 100%;"></i>
-                    </div>
-
-                </article>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="interpretation-section">
-
-            <div class="interpretation-heading">
-
-                <p class="eyebrow">
-                    Overall interpretation
-                </p>
-
-                <h3>
-                    Assortativity alone does not explain the high cooperation
-                </h3>
-
-            </div>
-
-
-            <div class="interpretation-points">
-
-                <article>
-                    <span>1</span>
-
-                    <p>
-                        The baseline provides a controlled test of assortative
-                        rematching without learned partner switching.
-                    </p>
-                </article>
-
-
-                <article>
-                    <span>2</span>
-
-                    <p>
-                        The full hybrid combines future-oriented action learning
-                        with adaptive partner retention and switching.
-                    </p>
-                </article>
-
-
-                <article>
-                    <span>3</span>
-
-                    <p>
-                        Removing either future-return learning or learned
-                        partner switching substantially changes the cooperative
-                        outcome.
-                    </p>
-                </article>
-
-
-                <article>
-                    <span>4</span>
-
-                    <p>
-                        Cooperative policies such as Always Cooperate and
-                        Tit-for-Tat were more prominent in the full hybrid,
-                        while ablated conditions became dominated by defective
-                        or tied policies.
-                    </p>
-                </article>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         LIMITATIONS
-    ====================================================== -->
-
-    <section class="section limitations-section" id="limitations">
-
-        <div class="section-heading">
-
-            <p class="eyebrow">
-                Scope and limitations
-            </p>
-
-            <h2>
-                Interpreting the findings carefully
-            </h2>
-
-            <p>
-                The results provide evidence about cooperation within the
-                implemented computational environment. They should not be
-                interpreted as direct evidence about human behaviour or every
-                possible multi-agent learning system.
-            </p>
-
-        </div>
-
-
-        <div class="limitations-grid">
-
-            <article>
-
-                <span>01</span>
-
-                <h3>
-                    Simplified environment
-                </h3>
-
-                <p>
-                    The study uses a repeated two-action Prisoner's Dilemma and
-                    therefore abstracts from many complexities of real-world
-                    interaction.
-                </p>
-
-            </article>
-
-
-            <article>
-
-                <span>02</span>
-
-                <h3>
-                    Specific learning architecture
-                </h3>
-
-                <p>
-                    Findings apply to the implemented Q-learning agents,
-                    state representation, payoff structure and interaction
-                    mechanisms.
-                </p>
-
-            </article>
-
-
-            <article>
-
-                <span>03</span>
-
-                <h3>
-                    Simulation evidence
-                </h3>
-
-                <p>
-                    Experimental conclusions are based on simulated populations
-                    rather than physical or human multi-agent systems.
-                </p>
-
-            </article>
-
-
-            <article>
-
-                <span>04</span>
-
-                <h3>
-                    Parameter-dependent behaviour
-                </h3>
-
-                <p>
-                    Cooperation can change across learning rates, exploration
-                    temperatures, population sizes and training horizons.
-                </p>
-
-            </article>
-
-
-            <article>
-
-                <span>05</span>
-
-                <h3>
-                    Browser visualisation
-                </h3>
-
-                <p>
-                    The website simulation simplifies the research implementation
-                    to make its central mechanisms accessible and interactive.
-                </p>
-
-            </article>
-
-
-            <article>
-
-                <span>06</span>
-
-                <h3>
-                    No universal optimum claimed
-                </h3>
-
-                <p>
-                    Sensitivity analyses test robustness. They do not establish
-                    a universally optimal hyperparameter configuration.
-                </p>
-
-            </article>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         ABOUT
-    ====================================================== -->
-
-    <section class="section about-section">
-
-        <div class="about-card">
-
-            <div>
-
-                <p class="eyebrow">
-                    About the project
-                </p>
-
-                <h2>
-                    MSc Computer Science research at Warwick
-                </h2>
-
-                <p>
-                    This project was developed by Panayiota Papafiggou as an
-                    individual MSc dissertation in the Department of Computer
-                    Science at the University of Warwick, supervised by
-                    Dr Paolo Turrini.
-                </p>
-
-            </div>
-
-
-            <div class="about-details">
-
-                <div>
-                    <span>Research area</span>
-                    <strong>Multi-agent reinforcement learning</strong>
-                </div>
-
-                <div>
-                    <span>Core environment</span>
-                    <strong>Repeated Prisoner's Dilemma</strong>
-                </div>
-
-                <div>
-                    <span>Primary mechanisms</span>
-                    <strong>Assortativity and partner switching</strong>
-                </div>
-
-                <div>
-                    <span>Implementation</span>
-                    <strong>Python and Numba</strong>
                 </div>
 
             </div>
@@ -2294,34 +504,15 @@
 </main>
 
 
-
 <footer>
+    <p>
+        Panayiota Papafiggou · MSc Computer Science · University of Warwick · 2026
+    </p>
 
-    <div>
-
-        <strong>
-            Panayiota “Yiota” Papafiggou
-        </strong>
-
-        <p>
-            Assortative Matching and the Emergence of Cooperation in
-            Multi-Agent Reinforcement Learning Systems
-        </p>
-
-    </div>
-
-    <div class="footer-right">
-
-        <p>
-            MSc Computer Science
-        </p>
-
-        <p>
-            University of Warwick
-        </p>
-
-    </div>
-
+    <p class="footer-note">
+        Interactive browser demonstration based on the dissertation model logic.
+        Full experimental results are reported in the dissertation.
+    </p>
 </footer>
 
 
